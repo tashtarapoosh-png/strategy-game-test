@@ -335,16 +335,41 @@ const server=http.createServer(async(req,res)=>{
     }
 
     // Public static files must be served before authentication.
-    if(req.method==='GET' && (req.url==='/' || req.url==='/index.html' || req.url==='/ghalee1.png')){
-      const fileName=req.url==='/'?'index.html':req.url.slice(1);
-      const filePath=path.join(__dirname,fileName);
-      if(fs.existsSync(filePath)){
-        const ext=path.extname(filePath).toLowerCase();
-        const type=ext==='.html'?'text/html; charset=utf-8':ext==='.png'?'image/png':'application/octet-stream';
-        res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});
-        return fs.createReadStream(filePath).pipe(res);
+    if(req.method==='GET'){
+      const requestPath=new URL(req.url,`http://${req.headers.host||'localhost'}`).pathname;
+      let fileName=null;
+
+      if(requestPath==='/' || requestPath==='/index.html' || requestPath==='/ghalee1.png'){
+        fileName=requestPath==='/'?'index.html':requestPath.slice(1);
+      }else if(requestPath.startsWith('/images/')){
+        fileName=requestPath.slice(1);
       }
-      return send(res,404,{error:'فایل پیدا نشد.'});
+
+      if(fileName){
+        const filePath=path.resolve(__dirname,fileName);
+        const imagesRoot=path.resolve(__dirname,'images');
+        const isAllowedRoot=fileName==='index.html' || fileName==='ghalee1.png';
+        const isAllowedImage=filePath.startsWith(imagesRoot+path.sep);
+
+        if(isAllowedRoot || isAllowedImage){
+          if(fs.existsSync(filePath) && fs.statSync(filePath).isFile()){
+            const ext=path.extname(filePath).toLowerCase();
+            const types={
+              '.html':'text/html; charset=utf-8',
+              '.png':'image/png',
+              '.jpg':'image/jpeg',
+              '.jpeg':'image/jpeg',
+              '.webp':'image/webp',
+              '.gif':'image/gif',
+              '.svg':'image/svg+xml'
+            };
+            const type=types[ext]||'application/octet-stream';
+            res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});
+            return fs.createReadStream(filePath).pipe(res);
+          }
+          return send(res,404,{error:'فایل پیدا نشد.'});
+        }
+      }
     }
 
     const u=auth(req);
