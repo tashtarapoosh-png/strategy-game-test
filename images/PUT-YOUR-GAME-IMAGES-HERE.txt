@@ -1,0 +1,10 @@
+تصاویر بازی را در همین پوشه قرار بده:
+castle.png
+tent.png
+archer1.png
+archer2.png
+cavalry1.png
+cavalry2.png
+swordsman1.png
+swordsman2.png
+ghalee1.png
