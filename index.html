@@ -381,7 +381,7 @@
 }
 #playerMapPanel.open{display:flex}
 #playerMapInner{
-  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden;
+  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden; display:flex; flex-direction:column;
   background:linear-gradient(180deg,#18212b,#0e151c); color:#fff; border:1px solid rgba(255,255,255,.16);
   border-radius:18px; box-shadow:0 20px 70px rgba(0,0,0,.55); padding:18px; box-sizing:border-box;
 }
@@ -434,7 +434,7 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:scroll;align-content:start;width:max-content;min-width:624px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;width:100%;min-width:0;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;flex:1}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
 .worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}.worldCell .castleFallback{display:block;font-size:34px;line-height:42px;height:42px;text-align:center}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -494,7 +494,7 @@
   .playerMapHeader{gap:5px}
   .playerMapHeader h2{font-size:15px}
   .playerMapLegend{font-size:9px;gap:5px}
-  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:624px;width:max-content;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:scroll;overflow-x:scroll;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
+  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:0;width:100%;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:auto;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain;flex:1}
   .worldCell{min-height:54px;padding:2px}
   .worldCell img{width:28px;height:28px}.worldCell .castleFallback{font-size:24px;line-height:28px;height:28px}
   .worldCell span{font-size:8px}
@@ -3446,7 +3446,8 @@ async function loadOnlineWorldPlayers(){
     renderPlayerWorld();
   } catch (error) {
     console.error("بارگذاری بازیکنان نقشه ناموفق بود:", error);
-    // Keep already-loaded real players visible; never replace them with fake players on API failure.
+    // Keep the map usable even if the online player request temporarily fails.
+    if (!Array.isArray(worldPlayers) || worldPlayers.length === 0) buildWorldPlayers();
     renderPlayerWorld();
   }
 }
@@ -3871,8 +3872,8 @@ function startBattle(attack) {
 
 function closeMapAndReturn(){document.getElementById("playerMapPanel").classList.remove("open");document.getElementById("developmentPanel").classList.add("open");}
 
-document.getElementById("playerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
-document.getElementById("developmentPlayerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
+document.getElementById("playerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");if(onlineToken){loadOnlineWorldPlayers();}else{renderPlayerWorld();}});
+document.getElementById("developmentPlayerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");if(onlineToken){loadOnlineWorldPlayers();}else{renderPlayerWorld();}});
 document.getElementById("closePlayerMapButton").addEventListener("click",closeMapAndReturn);
 document.getElementById("closeSelectedPlayerButton").addEventListener("click",function(){selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
 document.getElementById("attackSelectedPlayerButton").onclick = function(e){ e.preventDefault(); e.stopImmediatePropagation(); openAttackPanel(); };
