@@ -2640,7 +2640,7 @@ draw();
 /* ===============================
    سیستم ساده توسعه قلعه
 ================================ */
-const ONLINE_API = window.location.origin || "";
+const ONLINE_API = (window.location.origin || "") + "/api";
 let onlineToken = sessionStorage.getItem("strategy_game_token") || null;
 let onlineMode = true;
 let onlineSaveTimer = null;
@@ -3321,12 +3321,22 @@ async function handleAuth() {
             const elapsed = Math.max(0,(Date.now()-(Number(state.savedAt)||Date.now()))/1000);
             if (elapsed > 0) processDevelopmentElapsed(elapsed);
         }
-        saveDevelopmentState();
+        // ورود موفق شده است؛ ذخیره/بارگذاری‌های بعدی نباید آن را به‌عنوان خطای ورود نشان دهند.
+        try {
+            saveDevelopmentState();
+        } catch (saveError) {
+            console.warn("ذخیره اولیه وضعیت انجام نشد:", saveError);
+        }
         localStorage.setItem("strategy_game_last_user", currentUsername);
         openDevelopmentAfterLogin();
-        await loadOnlineWorldPlayers();
+        try {
+            await loadOnlineWorldPlayers();
+        } catch (worldError) {
+            console.warn("بارگذاری بازیکنان آنلاین انجام نشد:", worldError);
+        }
         msg.textContent = "";
     } catch (e) {
+        // فقط خطای خود درخواست login/register را خطای ورود در نظر بگیر.
         if (onlineToken && /401|وارد حساب|نام کاربری|رمز عبور/i.test(String(e.message || ""))) {
             onlineToken = null;
             sessionStorage.removeItem("strategy_game_token");
