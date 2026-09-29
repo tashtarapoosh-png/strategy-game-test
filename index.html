@@ -434,9 +434,9 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,minmax(60px,1fr));grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;min-width:0;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain}
+.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:scroll;align-content:start;width:max-content;min-width:624px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
-.worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}
+.worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}.worldCell .castleFallback{display:block;font-size:34px;line-height:42px;height:42px;text-align:center}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .worldCell.selected{outline:2px solid #ffd166;z-index:3}
 .worldCell.self{background:rgba(70,140,80,.25)}
@@ -448,7 +448,7 @@
 .marchCard{padding:8px 10px;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(15,20,30,.72)}
 .marchCard strong{display:block;margin-bottom:3px}
 .marchTimer{font-size:12px;opacity:.9}
-@media(max-width:700px){.attackGrid{grid-template-columns:1fr}.playerWorld.gridWorld{grid-template-columns:repeat(5,minmax(62px,1fr))}}
+@media(max-width:700px){.attackGrid{grid-template-columns:1fr}}
 
 .fastArrivalTestButton{display:block;margin:8px auto 12px;padding:8px 14px;border:1px solid rgba(255,255,255,.45);border-radius:9px;background:rgba(120,85,25,.95);color:#fff;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .fastArrivalTestButton:hover{background:rgba(150,105,30,.98)}
@@ -494,9 +494,9 @@
   .playerMapHeader{gap:5px}
   .playerMapHeader h2{font-size:15px}
   .playerMapLegend{font-size:9px;gap:5px}
-  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:620px;width:max-content;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:auto;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
+  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:624px;width:max-content;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:scroll;overflow-x:scroll;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
   .worldCell{min-height:54px;padding:2px}
-  .worldCell img{width:28px;height:28px}
+  .worldCell img{width:28px;height:28px}.worldCell .castleFallback{font-size:24px;line-height:28px;height:28px}
   .worldCell span{font-size:8px}
   .worldCell small{font-size:7px}
   .cellAttackBtn{font-size:8px;padding:1px 3px;top:-22px!important}
@@ -3497,7 +3497,7 @@ function renderPlayerWorld(){
     el.type="button";
     el.className="worldCell"+(owner&&owner.self?" self":"")+(owner&&selectedWorldPlayer===owner.id?" selected":"");
     if(owner){
-      el.innerHTML=`<img src="images/castle.png" alt="قلعه"><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
+      el.innerHTML=`<img src="images/castle.png" alt="قلعه" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class="castleFallback">🏰</span>')"><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
       el.addEventListener("click",(e)=>{
         e.preventDefault(); e.stopPropagation();
         selectWorldPlayer(owner.id);
