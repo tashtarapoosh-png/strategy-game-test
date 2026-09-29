@@ -399,6 +399,7 @@
 .playerWorld:before{content:"";position:absolute;left:42%;top:-10%;width:15%;height:125%;transform:rotate(7deg);background:rgba(65,145,190,.5);filter:blur(2px);}
 .playerMarker{position:absolute;transform:translate(-50%,-50%);min-width:112px;padding:8px 10px;border-radius:12px;background:rgba(20,25,30,.9);border:1px solid rgba(255,255,255,.18);text-align:center;cursor:pointer;transition:.15s;z-index:2}
 .playerMarker:hover,.playerMarker.selected{transform:translate(-50%,-50%) scale(1.05);border-color:#ffd166;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.unitMarkerIcon{display:block;font-size:38px;line-height:42px;height:42px;text-align:center}.trainingChoice .unitMarkerIcon{font-size:34px;margin:0 auto 4px}.battleMarkerLabel{font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.7)}
 .playerMarker .markerIcon{font-size:30px;display:block}
 .playerMarker .markerName{display:block;font-weight:700;margin-top:3px}
 .playerMarker small{display:block;opacity:.7;margin-top:2px}
@@ -875,17 +876,17 @@
             <div class="devInfo" id="trainingInfo"></div>
             <div class="trainingChoices">
                 <button type="button" class="trainingChoice" data-train-type="archer">
-                    <img src="images/archer1.png" alt="کماندار">
+                    <span class="unitMarkerIcon archerMarker" aria-hidden="true">🏹</span>
                     <span>🏹 کماندار</span>
                     <small>برای انتخاب کلیک کنید</small>
                 </button>
                 <button type="button" class="trainingChoice" data-train-type="cavalry">
-                    <img src="images/cavalry1.png" alt="سواره نظام">
+                    <span class="unitMarkerIcon cavalryMarker" aria-hidden="true">🐎</span>
                     <span>🐎 سواره‌نظام</span>
                     <small>برای انتخاب کلیک کنید</small>
                 </button>
                 <button type="button" class="trainingChoice" data-train-type="swordsman">
-                    <img src="images/swordsman1.png" alt="شمشیرزن">
+                    <span class="unitMarkerIcon swordsmanMarker" aria-hidden="true">⚔️</span>
                     <span>⚔️ شمشیرزن</span>
                     <small>برای انتخاب کلیک کنید</small>
                 </button>
@@ -1236,10 +1237,6 @@ function drawMapObjects() {
             ? castleImage
             : tentImage;
 
-        if (!image.complete || image.naturalWidth <= 0) {
-            continue;
-        }
-
         const screen = worldToView(object.x, object.y);
         const depth = Math.max(0, Math.min(1, viewDepth(object.y)));
         const scale = 0.55 + (1 - depth) * 0.45;
@@ -1261,14 +1258,21 @@ function drawMapObjects() {
         ctx.fill();
         ctx.restore();
 
-        // خود تصویر آبجکت
-        ctx.drawImage(
-            image,
-            screen.x - w / 2,
-            screen.y - h + 12,
-            w,
-            h
-        );
+        // اگر PNG در دسترس باشد همان تصویر را می‌کشیم؛ در غیر این صورت
+        // از نشانه‌گر داخلی استفاده می‌کنیم تا قلعه/چادر هرگز ناپدید نشود.
+        if (image.complete && image.naturalWidth > 0) {
+            ctx.drawImage(image, screen.x - w / 2, screen.y - h + 12, w, h);
+        } else {
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = `${Math.max(54, Math.round(w * 0.42))}px Arial, Segoe UI Symbol, sans-serif`;
+            ctx.fillStyle = object.player === 1 ? "#42a5ff" : "#ff4d5a";
+            ctx.shadowColor = "rgba(0,0,0,.55)";
+            ctx.shadowBlur = 10;
+            ctx.fillText(object.type === "castle" ? "♜" : "△", screen.x, screen.y - h * 0.42);
+            ctx.restore();
+        }
     }
 }
 
@@ -1743,30 +1747,37 @@ function draw() {
           تصویر بر اساس نوع و شماره بازیکن انتخاب می‌شود.
         */
 
-        const image =
-            images[piece.type][piece.player];
-
-
-        if (image && image.complete && image.naturalWidth > 0) {
-            // هر لاین یک گروه واقعی است؛ فقط برای نمایش، حداکثر ۷ سرباز کوچک
-            // از همان تصویر کنار هم دیده می‌شوند. تعداد واقعی نیرو دست‌نخورده می‌ماند.
-            const screen = worldToView(piece.x / CELL_SIZE, piece.y / CELL_SIZE);
-            const visibleCount = Math.min(7, Math.max(0, Math.floor(Number(piece.count) || 0)));
-            const formation = [
-                [-1, -0.58], [1, -0.58],
-                [-1.55, 0], [-0.52, 0], [0.52, 0], [1.55, 0],
-                [0, 0.58]
-            ];
-            const spriteW = 42, spriteH = 42, gap = 30;
-            ctx.save();
-            for (let si = 0; si < visibleCount; si++) {
-                const [ox, oy] = formation[si];
-                const sx = screen.x + ox * gap;
-                const sy = screen.y + oy * gap;
-                ctx.drawImage(image, sx - spriteW / 2, sy - spriteH - 8, spriteW, spriteH);
-            }
-            ctx.restore();
+        // از همان نشانه‌گرهای کوچک بازی استفاده می‌کنیم؛ وابسته به فایل PNG نیست.
+        const screen = worldToView(piece.x / CELL_SIZE, piece.y / CELL_SIZE);
+        const visibleCount = Math.min(7, Math.max(0, Math.floor(Number(piece.count) || 0)));
+        const formation = [
+            [-1, -0.58], [1, -0.58],
+            [-1.55, 0], [-0.52, 0], [0.52, 0], [1.55, 0],
+            [0, 0.58]
+        ];
+        const marker = piece.type === "archer" ? "🏹" : piece.type === "cavalry" ? "🐎" : "⚔";
+        const sideColor = piece.player === 1 ? "#42a5ff" : "#ff4d5a";
+        ctx.save();
+        ctx.font = "30px Arial, Segoe UI Symbol, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        for (let si = 0; si < visibleCount; si++) {
+            const [ox, oy] = formation[si];
+            const sx = screen.x + ox * 30;
+            const sy = screen.y + oy * 30 - 24;
+            // هاله رنگی دو طرف نبرد
+            ctx.beginPath();
+            ctx.arc(sx, sy, 19, 0, Math.PI * 2);
+            ctx.fillStyle = sideColor;
+            ctx.globalAlpha = 0.32;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = sideColor;
+            ctx.stroke();
+            ctx.fillText(marker, sx, sy);
         }
+        ctx.restore();
 
 
         /*
@@ -1783,7 +1794,6 @@ function draw() {
             "center";
 
 
-        const screen = worldToView(piece.x / CELL_SIZE, piece.y / CELL_SIZE);
         ctx.fillText(
             piece.count,
             screen.x,
@@ -3433,6 +3443,28 @@ async function loadOnlineWorldPlayers(){
       cell: Number.isFinite(Number(p.cell)) ? Math.max(0, Number(p.cell)) : index
     }));
 
+    // اگر فقط حساب فعلی روی سرور وجود دارد، برای تست نقشه چند قلعهٔ آزمایشی بساز.
+    // وقتی حساب‌های واقعی بیشتری وجود داشته باشند، همان بازیکنان واقعی نمایش داده می‌شوند.
+    if (worldPlayers.length === 1) {
+      const demoNames = ["شاهین سرخ","اتحاد شرق","قلعه سنگی","فرمانده غرب","سپاه جنوب","دژ آذر","نگهبان مرز","اتحاد سبز"];
+      const usedDemo = new Set(worldPlayers.map(p => p.cell));
+      for (let i = 0; i < demoNames.length; i++) {
+        let cell;
+        do { cell = 20 + Math.floor(Math.random() * Math.max(20, getWorldSize() - 20)); }
+        while (usedDemo.has(cell) || Array.from(usedDemo).some(c => Math.abs(c - cell) < 4));
+        usedDemo.add(cell);
+        worldPlayers.push({
+          id: `demo-${i + 1}`,
+          name: demoNames[i],
+          level: 1 + (i % 3),
+          status: i % 2 ? "آفلاین" : "آنلاین",
+          online: i % 2 === 0,
+          self: false,
+          cell
+        });
+      }
+    }
+
     // Avoid overlapping castles if older server records have duplicate/missing cells.
     const used = new Set();
     let nextCell = 0;
@@ -3486,8 +3518,20 @@ function getWorldSize(){
 
 function renderPlayerWorld(){
   const world=document.getElementById("playerWorld"); if(!world) return;
-  if ((!Array.isArray(worldPlayers) || worldPlayers.length === 0) && !onlineToken) {
+  if (!Array.isArray(worldPlayers) || worldPlayers.length === 0) {
     buildWorldPlayers();
+  }
+  // اگر سرور فقط بازیکن فعلی را برگرداند، قلعه‌های آزمایشی را برای تست نمایش بده.
+  if (onlineToken && worldPlayers.length === 1 && worldPlayers[0].self) {
+    const demoNames = ["شاهین سرخ","اتحاد شرق","قلعه سنگی","فرمانده غرب","سپاه جنوب","دژ آذر","نگهبان مرز","اتحاد سبز"];
+    const used = new Set(worldPlayers.map(p => p.cell));
+    for (let i=0;i<demoNames.length;i++) {
+      let cell;
+      do { cell = 20 + Math.floor(Math.random() * Math.max(20, getWorldSize() - 20)); }
+      while (used.has(cell) || Array.from(used).some(c => Math.abs(c-cell)<4));
+      used.add(cell);
+      worldPlayers.push({id:`demo-${i+1}`,name:demoNames[i],level:1+(i%3),status:i%2?"آفلاین":"آنلاین",online:i%2===0,self:false,cell});
+    }
   }
   world.classList.add("gridWorld"); world.innerHTML="";
   const totalCells=getWorldSize();
