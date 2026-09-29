@@ -452,6 +452,40 @@
 
 .fastArrivalTestButton{display:block;margin:8px auto 12px;padding:8px 14px;border:1px solid rgba(255,255,255,.45);border-radius:9px;background:rgba(120,85,25,.95);color:#fff;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .fastArrivalTestButton:hover{background:rgba(150,105,30,.98)}
+
+/* چیدمان موبایل */
+@media (max-width: 600px){
+  body{overflow-x:hidden}
+  #gameContainer{width:94vw;max-width:94vw}
+  #cameraTestButton,#developmentButton{top:10px;padding:7px 9px;min-height:36px;font-size:12px}
+  #setupPanel{top:42px;width:94vw;padding:10px}
+  #developmentPanel{padding:7px}
+  #developmentInner{width:96vw;min-height:0;padding:8px;border-radius:10px}
+  #developmentTopbar{gap:4px;padding:6px;margin-bottom:7px;font-size:11px}
+  .devStat{padding:5px 6px}
+  #developmentField{height:min(62vh,430px);min-height:330px;border-radius:9px}
+  #developmentScene{width:100%;height:100%}
+  .devBuilding .devLevel{min-width:48px;padding:2px 4px;font-size:9px}
+  .buildingTimer{min-width:84px;padding:3px 5px;font-size:9px;bottom:-27px}
+  #buildingActionPanel,#trainingPanel{padding:8px}
+  .devModal{width:94vw;max-height:88vh;overflow:auto;padding:11px;border-radius:10px}
+  .devModal button{padding:8px;margin:4px 0;font-size:13px}
+  .devInfo{font-size:12px;line-height:1.6}
+  .trainingChoices{gap:5px;margin:7px 0}
+  .trainingChoice{min-height:100px;padding:5px;border-radius:8px}
+  .trainingChoice img{width:52px;height:52px;margin-bottom:3px}
+  .trainingChoice span{font-size:11px}
+  .trainingChoice small{font-size:9px;margin-top:2px}
+  .devInput{width:90px;padding:7px;font-size:15px}
+  #playerMapPanel{padding:7px}
+  #playerMapInner{width:96vw;height:94vh;padding:8px;border-radius:10px}
+  .playerMapHeader h2{font-size:17px}
+  .playerWorld.gridWorld{grid-template-columns:repeat(5,minmax(48px,1fr));grid-auto-rows:58px;gap:1px;padding:2px}
+  .worldCell{min-height:58px;padding:2px}
+  .worldCell img{width:30px;height:30px}
+  .worldCell span{font-size:8px}
+  .worldCell small{font-size:8px}
+}
 </style>
 </head>
 
@@ -2717,29 +2751,44 @@ function capGold() {
     developmentState.gold = Math.min(developmentState.gold, getOfflineGoldCap());
 }
 
-function saveDevelopmentState() {
-    if (!onlineToken) return;
-    const snapshot = {
-        gold: Number(developmentState.gold) || 0,
-        buildings: developmentState.buildings,
-        army: developmentState.army,
-        activeUpgrade: developmentState.activeUpgrade,
-        activeTraining: developmentState.activeTraining,
-        activeAttacks: developmentState.activeAttacks,
-        defenderSetups: developmentState.defenderSetups,
-        pendingRecoveries: developmentState.pendingRecoveries,
-        attackRestrictions: developmentState.attackRestrictions
+function buildDevelopmentSnapshot(){
+    return {
+        gold:Number(developmentState.gold)||0,
+        buildings:JSON.parse(JSON.stringify(developmentState.buildings)),
+        army:JSON.parse(JSON.stringify(developmentState.army)),
+        activeUpgrade:developmentState.activeUpgrade?{...developmentState.activeUpgrade}:null,
+        activeTraining:JSON.parse(JSON.stringify(developmentState.activeTraining)),
+        activeAttacks:JSON.parse(JSON.stringify(developmentState.activeAttacks)),
+        defenderSetups:JSON.parse(JSON.stringify(developmentState.defenderSetups)),
+        pendingRecoveries:JSON.parse(JSON.stringify(developmentState.pendingRecoveries)),
+        attackRestrictions:JSON.parse(JSON.stringify(developmentState.attackRestrictions))
     };
-    lastDevelopmentSave = Date.now();
-    clearTimeout(onlineSaveTimer);
-    onlineSaveTimer = setTimeout(async () => {
-        try {
-            await onlineRequest('/state', {method:'PUT', body:JSON.stringify(snapshot)});
-        } catch (e) {
-            console.warn('ذخیره آنلاین ناموفق بود:', e.message);
-        }
-    }, 250);
 }
+
+function saveDevelopmentState(immediate=false){
+    if(!onlineToken) return;
+    const snapshot=buildDevelopmentSnapshot();
+    lastDevelopmentSave=Date.now();
+    clearTimeout(onlineSaveTimer);
+    const doSave=async()=>{
+        try{await onlineRequest('/state',{method:'PUT',body:JSON.stringify(snapshot)});}
+        catch(e){console.warn('ذخیره آنلاین ناموفق بود:',e.message);}
+    };
+    if(immediate) void doSave(); else onlineSaveTimer=setTimeout(doSave,250);
+}
+
+function flushOnlineSave(){
+    if(!onlineToken) return;
+    clearTimeout(onlineSaveTimer);
+    const snapshot=buildDevelopmentSnapshot();
+    try{
+      fetch(ONLINE_API+'/state',{method:'PUT',headers:{'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+onlineToken},body:JSON.stringify(snapshot),keepalive:true,cache:'no-store'});
+    }catch(e){}
+}
+
+window.addEventListener('pagehide',flushOnlineSave);
+window.addEventListener('beforeunload',flushOnlineSave);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden') flushOnlineSave();});
 
 
 function loadDevelopmentState(username, serverState) {
@@ -2965,7 +3014,7 @@ function startBuildingUpgrade(type) {
     updateDevelopmentUI();
     renderArmyMarches();
     refreshBuildingActionModal();
-    saveDevelopmentState();
+    saveDevelopmentState(true);
     return true;
 }
 
@@ -3115,7 +3164,7 @@ function startSelectedTraining() {
     document.getElementById("trainingPanel").classList.remove("open");
     setDevMessage(`${count} ${selectedTrainingType === "archer" ? "کماندار" : selectedTrainingType === "cavalry" ? "سواره‌نظام" : "شمشیرزن"} برای آموزش ثبت شد.`);
     updateDevelopmentUI();
-    saveDevelopmentState();
+    saveDevelopmentState(true);
 }
 
 function finishDevelopmentUpgrade() {
@@ -3319,7 +3368,8 @@ async function loadOnlineWorldPlayers(){
   try {
     const data = await onlineRequest("/players", { method: "GET" });
     const serverPlayers = Array.isArray(data.players) ? data.players : [];
-    serverWorldSize = Math.max(1, Number(data.worldSize) || 100);
+    serverWorldSize = Math.max(100, Number(data.worldSize) || 100);
+    serverCellLayout = new Map(Array.isArray(data.cellLayout) ? data.cellLayout.map(x=>[Number(x.cell),{x:Number(x.x),y:Number(x.y)}]) : []);
     const selfId = String(data.selfId ?? "");
 
     // Use the server's real player list; do not generate fake opponents when it succeeds.
@@ -3343,46 +3393,45 @@ async function loadOnlineWorldPlayers(){
 }
 
 let serverWorldSize = 100;
+let serverCellLayout = new Map();
 
 function getWorldSize(){
-  return Math.max(1, Number(serverWorldSize) || 100);
+  return Math.max(100, Number(serverWorldSize) || 100);
+}
+
+function getWorldCellCoord(index){
+  if(serverCellLayout.has(index)) return serverCellLayout.get(index);
+  if(index<100) return {x:index%10,y:Math.floor(index/10)};
+  const k=index-100, side=Math.floor(k/10), n=k%10, ring=Math.floor(side/4)+1, segment=side%4;
+  if(segment===0) return {x:9+(ring-1)*11-n,y:-ring};
+  if(segment===1) return {x:9+ring,y:n};
+  if(segment===2) return {x:9+(ring-1)*11-n,y:9+ring};
+  return {x:-ring,y:9+ring-n};
 }
 
 function renderPlayerWorld(){
   const world=document.getElementById("playerWorld"); if(!world) return;
   world.classList.add("gridWorld"); world.innerHTML="";
   const totalCells=getWorldSize();
+  const coords=Array.from({length:totalCells},(_,i)=>getWorldCellCoord(i));
+  const minX=Math.min(...coords.map(c=>c.x)), maxX=Math.max(...coords.map(c=>c.x));
+  const minY=Math.min(...coords.map(c=>c.y)), maxY=Math.max(...coords.map(c=>c.y));
+  const cols=maxX-minX+1;
+  world.style.gridTemplateColumns=`repeat(${cols}, minmax(48px,1fr))`;
   const castlesByCell=new Map(worldPlayers.map(p=>[p.cell,p]));
   for(let cell=0;cell<totalCells;cell++){
     const owner=castlesByCell.get(cell) || null;
-    const el=document.createElement("button");
-    el.type="button";
-    el.className="worldCell"+(owner&&owner.self?" self":"")+(owner&&selectedWorldPlayer===owner.id?" selected":"");
+    const el=document.createElement("button"); el.type="button"; el.className="worldCell"+(owner&&owner.self?" self":"")+(owner&&selectedWorldPlayer===owner.id?" selected":"");
+    const c=getWorldCellCoord(cell);
+    el.style.gridColumn=String(c.x-minX+1); el.style.gridRow=String(c.y-minY+1);
     if(owner){
-      el.innerHTML=`<img src="images/castle.png" alt="قلعه"><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
-      el.addEventListener("click",(e)=>{
-        e.preventDefault(); e.stopPropagation();
-        selectWorldPlayer(owner.id);
-        if(!owner.self){
-          selectedWorldPlayer=owner.id;
-        }
-      });
+      el.innerHTML=`<span style="font-size:24px">🏰</span><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
+      el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();selectWorldPlayer(owner.id);});
       if(!owner.self && selectedWorldPlayer===owner.id){
-        const attack=document.createElement("button");
-        attack.type="button";
-        attack.className="cellAttackBtn";
-        attack.textContent="⚔️ حمله";
-        attack.addEventListener("click",(e)=>{
-          e.preventDefault(); e.stopPropagation();
-          selectedWorldPlayer=owner.id;
-          openAttackPanel();
-        });
-        el.appendChild(attack);
-
+        const attack=document.createElement("button"); attack.type="button"; attack.className="cellAttackBtn"; attack.textContent="⚔️ حمله";
+        attack.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();selectedWorldPlayer=owner.id;openAttackPanel();}); el.appendChild(attack);
       }
-    } else {
-      el.innerHTML=`<span style="display:block;margin-top:20px;opacity:.35;">زمین خالی</span>`;
-    }
+    }else el.innerHTML=`<span style="display:block;margin-top:14px;opacity:.35;font-size:9px">زمین خالی</span>`;
     world.appendChild(el);
   }
 }

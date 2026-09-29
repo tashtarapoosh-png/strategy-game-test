@@ -13,7 +13,8 @@ const DATA_DIR = process.env.DATA_DIR || process.env.RENDER_DISK_PATH || __dirna
 fs.mkdirSync(DATA_DIR, {recursive:true});
 const DB = process.env.DB_PATH || path.join(DATA_DIR, 'data.json');
 
-const WORLD_SIZE = 190; // 10 columns x 19 rows, matching the map used by the client.
+const BASE_WORLD_CELLS = 100; // 10 x 10
+const CELLS_PER_PLAYER = 10;
 const DEVELOPMENT_MAX_LEVEL = 5;
 const BASE_GOLD_PER_MINUTE = 100;
 const STARTING_GOLD = 3000;
@@ -115,13 +116,33 @@ function players(){
   }));
 }
 
+function getWorldSize(userCount=db.users.length){
+  return BASE_WORLD_CELLS + Math.max(0, userCount - 1) * CELLS_PER_PLAYER;
+}
+
+// The first 100 cells are a 10x10 square. Every additional player expands
+// the map by 10 cells along successive sides of an outward square spiral.
+function worldCoord(index){
+  index=Math.max(0,Math.floor(Number(index)||0));
+  if(index<BASE_WORLD_CELLS) return {x:index%10,y:Math.floor(index/10)};
+  let k=index-BASE_WORLD_CELLS;
+  const side=Math.floor(k/10);
+  const n=k%10;
+  const ring=Math.floor(side/4)+1;
+  const segment=side%4;
+  if(segment===0) return {x:9+(ring-1)*11-n,y:-ring};
+  if(segment===1) return {x:9+ring,y:n};
+  if(segment===2) return {x:9+(ring-1)*11-n,y:9+ring};
+  return {x:-ring,y:9+ring-n};
+}
+
 function assignCell(){
   const used=new Set(db.users.map(u=>Number(u.cell)).filter(Number.isInteger));
+  const limit=getWorldSize();
   const free=[];
-  for(let i=0;i<WORLD_SIZE;i++) if(!used.has(i)) free.push(i);
+  for(let i=0;i<limit;i++) if(!used.has(i)) free.push(i);
   if(free.length) return free[crypto.randomInt(free.length)];
-  // Extremely unlikely with the current map size; keep deterministic fallback if the world is full.
-  return crypto.randomInt(WORLD_SIZE);
+  return Math.max(0,limit-1);
 }
 
 function num(value,fallback=0){
@@ -257,30 +278,6 @@ function applyOfflineProgress(user, now=Date.now()){
 }
 
 function touch(user){online.set(user.id,Date.now());}
-function contentType(filePath){
-  const ext=path.extname(filePath).toLowerCase();
-  return ({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml'}[ext]) || 'application/octet-stream';
-}
-
-function serveStatic(req,res){
-  if(req.method!=='GET'&&req.method!=='HEAD') return false;
-  let pathname;
-  try { pathname=new URL(req.url,'http://localhost').pathname; } catch { return false; }
-  if(pathname.startsWith('/api/')) return false;
-  if(pathname==='/' || pathname==='/index.html') pathname='/index.html';
-  const relative=decodeURIComponent(pathname).replace(/^\/+/, '');
-  const root=path.resolve(__dirname);
-  const filePath=path.resolve(root,relative);
-  if(filePath!==root && !filePath.startsWith(root+path.sep)){
-    res.writeHead(403,{'Content-Type':'text/plain; charset=utf-8'}); res.end('Forbidden'); return true;
-  }
-  if(!fs.existsSync(filePath)||!fs.statSync(filePath).isFile()) return false;
-  const data=fs.readFileSync(filePath);
-  res.writeHead(200,{'Content-Type':contentType(filePath),'Cache-Control':'no-cache'});
-  if(req.method==='HEAD') res.end(); else res.end(data);
-  return true;
-}
-
 
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS'){
@@ -328,17 +325,27 @@ const server=http.createServer(async(req,res)=>{
         return send(res,401,{error:'نام کاربری یا رمز عبور نادرست است.'});
 
       applyOfflineProgress(u);
-      if(!Number.isInteger(u.cell)||u.cell<0||u.cell>=WORLD_SIZE) u.cell=assignCell();
+      if(!Number.isInteger(u.cell)||u.cell<0||u.cell>=getWorldSize()) u.cell=assignCell();
       saveDB();
 
       const t=token();
       sessions.set(t,u.id);
       touch(u);
-      return send(res,200,{token:t,user:publicUser(u),worldSize:WORLD_SIZE});
+      return send(res,200,{token:t,user:publicUser(u),worldSize:getWorldSize()});
     }
 
-    // Static website files are public and must be served before protected API routes.
-    if(serveStatic(req,res)) return;
+    // Public static files must be served before authentication.
+    if(req.method==='GET' && (req.url==='/' || req.url==='/index.html' || req.url==='/ghalee1.png')){
+      const fileName=req.url==='/'?'index.html':req.url.slice(1);
+      const filePath=path.join(__dirname,fileName);
+      if(fs.existsSync(filePath)){
+        const ext=path.extname(filePath).toLowerCase();
+        const type=ext==='.html'?'text/html; charset=utf-8':ext==='.png'?'image/png':'application/octet-stream';
+        res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});
+        return fs.createReadStream(filePath).pipe(res);
+      }
+      return send(res,404,{error:'فایل پیدا نشد.'});
+    }
 
     const u=auth(req);
     if(!u)return send(res,401,{error:'ابتدا وارد حساب شوید.'});
@@ -363,7 +370,7 @@ const server=http.createServer(async(req,res)=>{
 
     if(req.url==='/api/players'&&req.method==='GET'){
       // Do not alter other players' states here; this endpoint is only the persistent world view.
-      return send(res,200,{selfId:u.id,worldSize:WORLD_SIZE,players:players()});
+      return send(res,200,{selfId:u.id,worldSize:getWorldSize(),players:players(),cellLayout:db.users.map(x=>({id:x.id,cell:x.cell,...worldCoord(x.cell)}))});
     }
 
     return send(res,404,{error:'مسیر پیدا نشد.'});
