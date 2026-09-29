@@ -434,7 +434,7 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,minmax(60px,1fr));grid-auto-rows:minmax(72px,1fr);gap:2px;padding:4px;overflow:auto;align-content:start}
+.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,minmax(60px,1fr));grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;min-width:0}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
 .worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -494,7 +494,7 @@
   .playerMapHeader{gap:5px}
   .playerMapHeader h2{font-size:15px}
   .playerMapLegend{font-size:9px;gap:5px}
-  .playerWorld.gridWorld{min-height:0;height:calc(100vh - 190px);grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(54px,1fr);gap:1px;overflow:hidden}
+  .playerWorld.gridWorld{min-height:0;height:calc(100vh - 190px);min-width:620px;grid-template-columns:repeat(10,minmax(60px,1fr));grid-auto-rows:54px;gap:1px;overflow:auto;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;align-content:start}
   .worldCell{min-height:54px;padding:2px}
   .worldCell img{width:28px;height:28px}
   .worldCell span{font-size:8px}
