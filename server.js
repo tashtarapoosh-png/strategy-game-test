@@ -33,8 +33,22 @@ function sanitizeDefenseSlots(slots, army){
     return {type,count};
   });
 }
+function getPersistedDefenseSetup(defender){
+  const slots = defender?.state?.defenderSetups?.self?.slots;
+  return sanitizeDefenseSlots(slots, defender?.state?.army || {});
+}
 function attackForClient(a, attacker, defender){
-  return {...a, attackerName:attacker?.username||'مهاجم', defenderName:defender?.username||'مدافع', arrivalAt:Number(a.arrivalAt)||0};
+  const copy = {...a};
+  // آرایش دفاعی همیشه از وضعیت ذخیره‌شده خود مدافع خوانده می‌شود.
+  // این کار برای حمله‌های قدیمی هم مهم است که ممکن است defenderSetup نداشته باشند.
+  const persistedSetup = getPersistedDefenseSetup(defender);
+  if(!Array.isArray(copy.defenderSetup?.slots) || copy.defenderSetup.slots.length !== 6 ||
+     copy.defenderSetup.slots.every(x => !Number(x?.count))) {
+    copy.defenderSetup = {slots:persistedSetup};
+  } else {
+    copy.defenderSetup = {slots:sanitizeDefenseSlots(copy.defenderSetup.slots, defender?.state?.army || {})};
+  }
+  return {...copy, attackerName:attacker?.username||'مهاجم', defenderName:defender?.username||'مدافع', arrivalAt:Number(a.arrivalAt)||0};
 }
 async function persistAttackToUsers(attacker, defender){
   await saveUser(attacker);
@@ -390,7 +404,17 @@ const server=http.createServer(async(req,res)=>{
       const outgoing=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.filter(a=>a.role==='attacker'&&!a.battleEndedAt):[];
       let changed=false;
       for(const a of outgoing){
-        if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; changed=true; }
+        if(a.status==='traveling' && Number(a.arrivalAt)<=now){
+          a.status='arrived'; a.remaining=0; a.battleStartedAt=Number(a.arrivalAt)||now;
+          const defender=db.users.find(x=>String(x.id)===String(a.targetId));
+          if(defender){
+            a.defenderSetup={slots:getPersistedDefenseSetup(defender)};
+            const mirror=Array.isArray(defender.state.activeAttacks)?defender.state.activeAttacks.find(x=>String(x.id)===String(a.id)):null;
+            if(mirror){ mirror.status='arrived'; mirror.remaining=0; mirror.battleStartedAt=a.battleStartedAt; mirror.defenderSetup={slots:getPersistedDefenseSetup(defender)}; }
+            await saveUser(defender);
+          }
+          changed=true;
+        }
       }
       if(changed) await saveUser(u);
       const result=outgoing.map(a=>attackForClient(a, u, db.users.find(x=>String(x.id)===String(a.targetId))));
@@ -402,7 +426,19 @@ const server=http.createServer(async(req,res)=>{
       const incoming=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.filter(a=>a.role==='defender'&&!a.battleEndedAt):[];
       let changed=false;
       for(const a of incoming){
-        if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; a.defenderSetup=sanitizeDefenseSlots(u.state.defenderSetups?.self?.slots,u.state.army); changed=true; }
+        if(a.status==='traveling' && Number(a.arrivalAt)<=now){
+          a.status='arrived'; a.remaining=0;
+          a.battleStartedAt=Number(a.arrivalAt)||now;
+          a.defenderSetup={slots:getPersistedDefenseSetup(u)};
+          const attacker=db.users.find(x=>String(x.id)===String(a.attackerId));
+          const mirror=attacker && Array.isArray(attacker.state.activeAttacks)?attacker.state.activeAttacks.find(x=>String(x.id)===String(a.id)):null;
+          if(mirror){ mirror.status='arrived'; mirror.remaining=0; mirror.battleStartedAt=a.battleStartedAt; mirror.defenderSetup={slots:getPersistedDefenseSetup(u)}; await saveUser(attacker); }
+          changed=true;
+        }
+      }
+      // حتی اگر حمله از قبل arrived بوده، آرایش فعلی مدافع را تضمین کن.
+      for(const a of incoming){
+        if(a.status==='arrived' && !a.battleEndedAt){ a.defenderSetup={slots:getPersistedDefenseSetup(u)}; a.battleStartedAt=Number(a.battleStartedAt)||Number(a.arrivalAt)||now; }
       }
       if(changed) await saveUser(u);
       const result=[];
