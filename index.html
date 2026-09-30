@@ -412,7 +412,7 @@
 .playerMapHeader h2{margin:0}
 .playerMapLegend{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;opacity:.9}
 .playerWorld{
-  position:relative; min-height:540px; margin-top:14px; border-radius:16px; overflow:auto;
+  position:relative; min-height:540px; margin-top:14px; border-radius:16px; overflow:auto; min-width:0; width:100%;
   background:
     linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px),
     linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
@@ -420,6 +420,7 @@
   background-size:60px 60px,60px 60px,100% 100%; border:1px solid rgba(255,255,255,.12);
 }
 .playerWorld:before{content:"";position:absolute;left:42%;top:-10%;width:15%;height:125%;transform:rotate(7deg);background:rgba(65,145,190,.5);filter:blur(2px);}
+.playerWorldGrid{display:grid;position:relative;grid-auto-flow:row;align-content:start;width:max-content;min-width:max-content;min-height:100%;}
 .playerMarker{position:absolute;transform:translate(-50%,-50%);min-width:112px;padding:8px 10px;border-radius:12px;background:rgba(20,25,30,.9);border:1px solid rgba(255,255,255,.18);text-align:center;cursor:pointer;transition:.15s;z-index:2}
 .playerMarker:hover,.playerMarker.selected{transform:translate(-50%,-50%) scale(1.05);border-color:#ffd166;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .playerMarker .markerIcon{font-size:30px;display:block}
@@ -460,7 +461,7 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;width:100%;min-width:0;max-width:100%;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable}
+.playerWorld.gridWorld{display:block;gap:0;padding:4px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable;overflow:auto;width:100%;min-width:0;}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
 .worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}.worldCell .castleFallback{display:block;font-size:34px;line-height:42px;height:42px;text-align:center}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -473,7 +474,7 @@
 .playerWorld.gridWorld::-webkit-scrollbar{width:10px;height:10px}
 .playerWorld.gridWorld::-webkit-scrollbar-track{background:rgba(0,0,0,.28);border-radius:8px}
 .playerWorld.gridWorld::-webkit-scrollbar-thumb{background:rgba(255,255,255,.42);border-radius:8px;border:2px solid rgba(0,0,0,.15)}
-.playerWorld.gridWorld{scrollbar-width:auto;scrollbar-gutter:stable}
+.playerWorld.gridWorld{scrollbar-width:auto;scrollbar-gutter:stable;}
 .worldCell{position:relative;overflow:visible}
 .marchCard{padding:8px 10px;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(15,20,30,.72)}
 .marchCard strong{display:block;margin-bottom:3px}
@@ -520,7 +521,7 @@
   .playerMapHeader{gap:5px}
   .playerMapHeader h2{font-size:15px}
   .playerMapLegend{font-size:9px;gap:5px}
-  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:624px;width:max-content;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:scroll;overflow-x:scroll;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
+  .playerWorld.gridWorld{display:block;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:0;width:100%;gap:1px;padding:4px;overflow:scroll;overflow-x:scroll;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
   .worldCell{min-height:54px;padding:2px}
   .worldCell img{width:28px;height:28px}.worldCell .castleFallback{font-size:24px;line-height:28px;height:28px}
   .worldCell span{font-size:8px}
@@ -3576,12 +3577,18 @@ function buildWorldPlayers(){
 }
 
 function getWorldBounds(){
-  if (!Array.isArray(worldPlayers) || !worldPlayers.length) return {minX:0,maxX:9,minY:0,maxY:9};
+  // نقشه یک فضای واقعی و بزرگ دارد؛ مختصات بازیکنان از SQL/سرور
+  // مستقیماً داخل همین فضای ثابت قرار می‌گیرند.
+  const BASE_WORLD_COLUMNS = 40;
+  const BASE_WORLD_ROWS = 40;
+  if (!Array.isArray(worldPlayers) || !worldPlayers.length) {
+    return {minX:0,maxX:BASE_WORLD_COLUMNS-1,minY:0,maxY:BASE_WORLD_ROWS-1};
+  }
   const xs=worldPlayers.map(p=>Number(p.gridX)).filter(Number.isFinite);
   const ys=worldPlayers.map(p=>Number(p.gridY)).filter(Number.isFinite);
-  if(!xs.length || !ys.length) return {minX:0,maxX:9,minY:0,maxY:9};
-  const minX=Math.min(0,...xs), maxX=Math.max(9,...xs);
-  const minY=Math.min(0,...ys), maxY=Math.max(9,...ys);
+  if(!xs.length || !ys.length) return {minX:0,maxX:BASE_WORLD_COLUMNS-1,minY:0,maxY:BASE_WORLD_ROWS-1};
+  const minX=0, maxX=Math.max(BASE_WORLD_COLUMNS-1, ...xs);
+  const minY=0, maxY=Math.max(BASE_WORLD_ROWS-1, ...ys);
   return {minX,maxX,minY,maxY};
 }
 
@@ -3595,13 +3602,16 @@ function renderPlayerWorld(){
   if ((!Array.isArray(worldPlayers) || worldPlayers.length === 0) && !onlineToken) buildWorldPlayers();
 
   world.classList.add("gridWorld");
-  world.innerHTML="";
+  world.innerHTML="<div id=\"playerWorldGrid\" class=\"playerWorldGrid\"></div>";
+  const grid=document.getElementById("playerWorldGrid");
 
   const bounds=getWorldBounds();
   const cols=bounds.maxX-bounds.minX+1;
   const rows=bounds.maxY-bounds.minY+1;
-  world.style.gridTemplateColumns=`repeat(${cols},60px)`;
-  world.style.gridTemplateRows=`repeat(${rows},72px)`;
+  grid.style.gridTemplateColumns=`repeat(${cols},60px)`;
+  grid.style.gridTemplateRows=`repeat(${rows},72px)`;
+  grid.style.width=`${Math.max(60, cols*60)}px`;
+  grid.style.height=`${Math.max(72, rows*72)}px`;
 
   const castlesByCoord=new Map(worldPlayers.map(p=>[`${p.gridX},${p.gridY}`,p]));
   for(let y=bounds.minY;y<=bounds.maxY;y++){
@@ -3625,10 +3635,25 @@ function renderPlayerWorld(){
       } else {
         el.innerHTML=`<span style="display:block;margin-top:20px;opacity:.35;">زمین خالی</span>`;
       }
-      world.appendChild(el);
+      grid.appendChild(el);
+    }
+  }
+
+  // هنگام ورود به نقشه، قلعه بازیکن خودمان در مرکز دید قرار بگیرد.
+  const me=worldPlayers.find(p=>p.self);
+  if(me){
+    const selfEl=Array.from(grid.children).find(el=>el.classList.contains("self"));
+    if(selfEl){
+      requestAnimationFrame(()=>{
+        const left=selfEl.offsetLeft - Math.max(0,(world.clientWidth-selfEl.offsetWidth)/2);
+        const top=selfEl.offsetTop - Math.max(0,(world.clientHeight-selfEl.offsetHeight)/2);
+        world.scrollLeft=Math.max(0,left);
+        world.scrollTop=Math.max(0,top);
+      });
     }
   }
 }
+
 
 function selectWorldPlayer(id){
   selectedWorldPlayer=id;
