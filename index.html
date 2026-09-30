@@ -381,7 +381,7 @@
 }
 #playerMapPanel.open{display:flex}
 #playerMapInner{
-  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden;
+  width:min(1100px,96vw); height:min(760px,92vh); overflow:auto;
   background:linear-gradient(180deg,#18212b,#0e151c); color:#fff; border:1px solid rgba(255,255,255,.16);
   border-radius:18px; box-shadow:0 20px 70px rgba(0,0,0,.55); padding:18px; box-sizing:border-box;
 }
@@ -434,7 +434,7 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:scroll;align-content:start;width:max-content;min-width:624px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;width:max-content;min-width:624px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
 .worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}.worldCell .castleFallback{display:block;font-size:34px;line-height:42px;height:42px;text-align:center}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -444,6 +444,10 @@
 .worldCell:hover .cellAttackBtn{filter:brightness(1.2)}
 .worldCell .cellAttackBtn{position:absolute;left:50%;top:-68px;transform:translateX(-50%);z-index:8;white-space:nowrap;border:1px solid rgba(255,255,255,.35)}
 .worldCell .cellDefenseBtn{position:absolute;left:50%;top:-34px;transform:translateX(-50%);z-index:8;white-space:nowrap;border:1px solid rgba(255,255,255,.35);background:#243b2a;color:#fff}
+.playerWorld.gridWorld::-webkit-scrollbar{width:10px;height:10px}
+.playerWorld.gridWorld::-webkit-scrollbar-track{background:rgba(0,0,0,.28);border-radius:8px}
+.playerWorld.gridWorld::-webkit-scrollbar-thumb{background:rgba(255,255,255,.42);border-radius:8px;border:2px solid rgba(0,0,0,.15)}
+.playerWorld.gridWorld{scrollbar-width:auto;scrollbar-gutter:stable}
 .worldCell{position:relative;overflow:visible}
 .marchCard{padding:8px 10px;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(15,20,30,.72)}
 .marchCard strong{display:block;margin-bottom:3px}
@@ -835,6 +839,7 @@
             <div class="devHeaderRow"><h2 style="margin:4px 0 10px;">🏰 توسعه قلعه</h2><button type="button" id="logoutGameButton" class="logoutGameButton">🚪 خروج از بازی</button></div>
             <div id="developmentTopbar">
                 <button type="button" id="developmentPlayerMapButton" class="devStat" style="cursor:pointer;">🌍 نقشه بازیکنان</button>
+                <button type="button" id="enterBattleFromDevelopmentButton" class="devStat" style="cursor:pointer;">⚔️ ورود به صحنه نبرد</button>
                 <div class="devStat" id="devGoldStat">🪙 طلا: 3000</div>
                 <div class="devStat" id="devProductionStat">📈 تولید: 100 طلا/دقیقه</div>
                 <div class="devStat" id="devArcherStat">🏹 کماندار: 0</div>
@@ -3788,6 +3793,35 @@ function closeMapAndReturn(){document.getElementById("playerMapPanel").classList
 
 document.getElementById("playerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
 document.getElementById("developmentPlayerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
+async function enterBattleFromDevelopment(){
+  if(gameStarted){
+    document.getElementById("developmentPanel")?.classList.remove("open");
+    return;
+  }
+  if(!onlineToken){
+    setDevMessage("ابتدا وارد حساب شوید.");
+    return;
+  }
+  try{
+    const [incomingData,outgoingData]=await Promise.all([
+      onlineRequest('/attacks/incoming'),
+      onlineRequest('/attacks/outgoing')
+    ]);
+    const incoming=(Array.isArray(incomingData.attacks)?incomingData.attacks:[])
+      .find(a=>a.status==='arrived' && !a.battleEndedAt);
+    const outgoing=(Array.isArray(outgoingData.attacks)?outgoingData.attacks:[])
+      .find(a=>a.status==='arrived' && !a.battleEndedAt);
+    const attack=incoming||outgoing;
+    if(attack){
+      startBattle(attack);
+      return;
+    }
+    setDevMessage("⚔️ در حال حاضر نبرد آماده ورود نیست.");
+  }catch(e){
+    setDevMessage("ورود به صحنه نبرد انجام نشد؛ اتصال به سرور را بررسی کنید.");
+  }
+}
+document.getElementById("enterBattleFromDevelopmentButton")?.addEventListener("click",enterBattleFromDevelopment);
 document.getElementById("closePlayerMapButton").addEventListener("click",closeMapAndReturn);
 document.getElementById("closeSelectedPlayerButton").addEventListener("click",function(){selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
 document.getElementById("attackSelectedPlayerButton").onclick = function(e){ e.preventDefault(); e.stopImmediatePropagation(); openAttackPanel(); };
