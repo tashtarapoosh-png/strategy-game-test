@@ -436,8 +436,8 @@
 .defenseActions button{flex:1;padding:10px;border-radius:9px;cursor:pointer}
 .developmentDefenseButton{position:absolute;left:34%;top:79%;transform:translate(-50%,-50%);z-index:8;padding:8px 14px;border:1px solid rgba(255,255,255,.55);border-radius:9px;background:rgba(35,59,42,.94);color:#fff;font-size:14px;font-weight:bold;cursor:pointer;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.4)}
 .developmentDefenseButton:hover{background:rgba(45,80,55,.98)}
-.fastArrivalTopRow{margin-top:42px!important;justify-content:flex-start!important}
-.fastArrivalTopButton{max-width:calc((100% - 20px)/3);background:rgba(120,85,25,.95)!important;border-color:rgba(255,255,255,.45)!important}
+.fastArrivalTopRow{margin-top:42px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;justify-content:stretch!important}
+.fastArrivalTopButton{width:100%;max-width:none!important;background:rgba(120,85,25,.95)!important;border-color:rgba(255,255,255,.45)!important}
 .fastArrivalTopButton:hover{background:rgba(150,105,30,.98)!important}
 #battleRetreatControls{position:absolute;left:50%;top:16px;transform:translateX(-50%);z-index:20;display:none;gap:10px;direction:rtl}
 #battleRetreatControls.open{display:flex}
@@ -460,7 +460,7 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;width:max-content;min-width:624px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable}
+.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;width:100%;min-width:0;max-width:100%;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
 .worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}.worldCell .castleFallback{display:block;font-size:34px;line-height:42px;height:42px;text-align:center}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -495,7 +495,7 @@
   #developmentField{height:calc(100vh - 245px);min-height:300px;max-height:480px;border-radius:9px}
   #developmentScene{width:100%;height:100%;max-width:none}
   .developmentDefenseButton{left:34%;top:79%;padding:5px 8px;font-size:10px}
-  .fastArrivalTopRow{margin-top:34px!important}.fastArrivalTopButton{max-width:calc((100% - 20px)/3);padding:5px 8px;font-size:10px}
+  .fastArrivalTopRow{margin-top:34px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}.fastArrivalTopButton{width:100%;max-width:none!important;padding:5px 8px;font-size:10px}
   .developmentLevelOverlay{min-width:24px;padding:2px 5px;font-size:10px}
   .developmentTimerOverlay{min-width:74px;padding:3px 5px;font-size:9px}
   #devMessage{min-height:20px;margin:4px 0;font-size:11px}
