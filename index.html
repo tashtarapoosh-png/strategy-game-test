@@ -202,7 +202,19 @@
 
     #developmentBackground { z-index: 1; }
     #developmentWall { z-index: 2; }
-    .developmentBuildingImage { z-index: 3; }
+    .developmentBuildingImage { z-index: 3; pointer-events: auto; cursor: pointer; }
+    .developmentLevelOverlay {
+        position: absolute; z-index: 7; transform: translate(-50%, -50%);
+        min-width: 30px; padding: 3px 7px; border-radius: 8px;
+        background: rgba(0,0,0,.82); color: #fff; font-size: 14px; font-weight: bold;
+        line-height: 1.2; text-align: center; pointer-events: none; user-select: none; box-sizing: border-box;
+    }
+    .developmentTimerOverlay {
+        position: absolute; z-index: 8; transform: translateX(-50%); display: none;
+        min-width: 118px; padding: 6px 9px; border: 2px solid #ffd54a; border-radius: 9px;
+        background: rgba(15,15,15,.94); color: #fff; font-size: 12px; font-weight: bold;
+        text-align: center; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 7px rgba(0,0,0,.45);
+    }
 
     #developmentScene {
         position: absolute;
@@ -233,8 +245,7 @@
         border-color: rgba(255,213,74,.75);
         box-shadow: 0 0 18px rgba(255,213,74,.22);
     }
-    .devBuilding .devLevel {
-        position: absolute;
+          position: absolute;
         left: 50%;
         bottom: 8%;
         transform: translateX(-50%);
@@ -250,12 +261,8 @@
         pointer-events: none;
         white-space: nowrap;
     }
-    .devBuilding[data-building="castle"] { width: 34%; height: 31%; }
-    .devBuilding[data-building="wall"] { width: 76%; height: 13%; }
-    .devBuilding[data-building="barracks1"],
-    .devBuilding[data-building="barracks2"] { width: 27%; height: 24%; }
-    .devBuilding[data-building="goldMine"] { width: 34%; height: 24%; }
-    .buildingTimer {
+          .devBuilding[data-building="barracks2"] { width: 27%; height: 24%; }
+      .buildingTimer {
         display: none;
         position: absolute;
         left: 50%;
@@ -477,20 +484,15 @@
 .devHeaderRow h2{flex:1}
 .logoutGameButton{padding:7px 10px;border:1px solid rgba(255,255,255,.45);border-radius:8px;background:#5b2020;color:#fff;font-size:12px;font-weight:bold;cursor:pointer;white-space:nowrap}
 @media(max-width:700px){
-  #developmentPanel{padding:6px;overflow:hidden}
-  #developmentInner{width:100%;min-width:0;max-width:100%;min-height:0;height:calc(100vh - 12px);padding:8px;border-radius:10px;overflow:hidden}
+  #developmentPanel{padding:6px;overflow-x:hidden;overflow-y:auto}
+  #developmentInner{width:100%;min-width:0;max-width:100%;min-height:0;height:auto;min-height:calc(100vh - 12px);padding:8px;border-radius:10px;overflow:visible}
   #developmentTopbar{gap:4px;padding:5px;margin-bottom:5px;font-size:11px}
   .devStat{padding:4px 6px;border-radius:6px;font-size:10px}
   #developmentField{height:calc(100vh - 245px);min-height:300px;max-height:480px;border-radius:9px}
   #developmentScene{width:100%;height:100%;max-width:none}
-  .devBuilding{border-width:1px;border-radius:10px}
-  .devBuilding[data-building="barracks1"],.devBuilding[data-building="barracks2"]{width:25%;height:21%}
-  .devBuilding[data-building="castle"]{width:31%;height:28%}
-  .devBuilding[data-building="goldMine"]{width:31%;height:21%}
-  .devBuilding[data-building="wall"]{width:72%;height:12%}
-  .devBuilding .devLevel{min-width:48px;padding:2px 4px;font-size:9px;bottom:2%}
-  .buildingTimer{min-width:74px;padding:3px 5px;font-size:9px;bottom:-25px}
   .developmentDefenseButton{top:1%;padding:5px 8px;font-size:10px}
+  .developmentLevelOverlay{min-width:24px;padding:2px 5px;font-size:10px}
+  .developmentTimerOverlay{min-width:74px;padding:3px 5px;font-size:9px}
   #devMessage{min-height:20px;margin:4px 0;font-size:11px}
   #devCloseButton{margin-top:3px;padding:6px 12px;font-size:11px}
   .devHeaderRow h2{font-size:15px}
@@ -866,19 +868,22 @@
             <div id="developmentField">
                 <div id="developmentScene">
                     <img id="developmentBackground" class="developmentLayer" src="images/development/development-background.jpg" alt="زمینه قلعه" loading="eager" draggable="false">
-                    <img id="developmentWall" class="developmentLayer" src="images/development/development-wall.png" alt="دیوار قلعه" loading="eager" draggable="false">
-                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-castle.png" alt="قلعه" loading="eager" draggable="false">
-                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-barracks1.png" alt="سربازخانه ۱" loading="eager" draggable="false">
-                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-barracks2.png" alt="سربازخانه ۲" loading="eager" draggable="false">
-                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-goldMine.png" alt="معدن طلا" loading="eager" draggable="false">
-
-                    <!-- لایه‌های نامرئی کلیک، همان منطق قبلی را اجرا می‌کنند. -->
-                    <div class="devBuilding" data-building="castle" style="left:50%;top:32%;" role="button" aria-label="قلعه"><span class="devLevel" id="level-castle">سطح 1</span><span class="buildingTimer" id="buildingTimer-castle"></span></div>
-                    <div class="devBuilding" data-building="wall" style="left:50%;top:9%;" role="button" aria-label="دیوار"><span class="devLevel" id="level-wall">سطح 1</span><span class="buildingTimer" id="buildingTimer-wall"></span></div>
+                    <img id="developmentWall" class="developmentLayer developmentBuildingImage" data-building="wall" src="images/development/development-wall.png" alt="دیوار قلعه" loading="eager" draggable="false">
+                    <img id="developmentCastle" class="developmentLayer developmentBuildingImage" data-building="castle" src="images/development/development-castle.png" alt="قلعه" loading="eager" draggable="false">
+                    <img id="developmentBarracks1" class="developmentLayer developmentBuildingImage" data-building="barracks1" src="images/development/development-barracks1.png" alt="سربازخانه ۱" loading="eager" draggable="false">
+                    <img id="developmentBarracks2" class="developmentLayer developmentBuildingImage" data-building="barracks2" src="images/development/development-barracks2.png" alt="سربازخانه ۲" loading="eager" draggable="false">
+                    <img id="developmentGoldMine" class="developmentLayer developmentBuildingImage" data-building="goldMine" src="images/development/development-goldMine.png" alt="معدن طلا" loading="eager" draggable="false">
+                    <span class="developmentLevelOverlay" id="level-castle" style="left:50%;top:32%;">1</span>
+                    <span class="developmentLevelOverlay" id="level-wall" style="left:50%;top:9%;">1</span>
+                    <span class="developmentLevelOverlay" id="level-barracks1" style="left:22%;top:52%;">1</span>
+                    <span class="developmentLevelOverlay" id="level-barracks2" style="left:78%;top:52%;">1</span>
+                    <span class="developmentLevelOverlay" id="level-goldMine" style="left:50%;top:67%;">1</span>
+                    <span class="developmentTimerOverlay" id="buildingTimer-castle" style="left:50%;top:47%;"></span>
+                    <span class="developmentTimerOverlay" id="buildingTimer-wall" style="left:50%;top:16%;"></span>
+                    <span class="developmentTimerOverlay" id="buildingTimer-barracks1" style="left:22%;top:66%;"></span>
+                    <span class="developmentTimerOverlay" id="buildingTimer-barracks2" style="left:78%;top:66%;"></span>
+                    <span class="developmentTimerOverlay" id="buildingTimer-goldMine" style="left:50%;top:81%;"></span>
                     <button type="button" id="developmentDefenseButton" class="developmentDefenseButton">🛡️ چینش دفاع</button>
-                    <div class="devBuilding" data-building="barracks1" style="left:22%;top:52%;" role="button" aria-label="سربازخانه ۱"><span class="devLevel" id="level-barracks1">سطح 1</span><span class="buildingTimer" id="buildingTimer-barracks1"></span></div>
-                    <div class="devBuilding" data-building="barracks2" style="left:78%;top:52%;" role="button" aria-label="سربازخانه ۲"><span class="devLevel" id="level-barracks2">سطح 1</span><span class="buildingTimer" id="buildingTimer-barracks2"></span></div>
-                    <div class="devBuilding" data-building="goldMine" style="left:50%;top:67%;" role="button" aria-label="معدن طلا"><span class="devLevel" id="level-goldMine">سطح 1</span><span class="buildingTimer" id="buildingTimer-goldMine"></span></div>
                 </div>
             </div>
             <div id="devMessage"></div>
@@ -2993,7 +2998,7 @@ function updateDevelopmentUI() {
 
     Object.keys(s.buildings).forEach(key => {
         const el = document.getElementById(`level-${key}`);
-        if (el) el.textContent = `سطح ${s.buildings[key].level}`;
+        if (el) el.textContent = String(s.buildings[key].level);
     });
 
     const upgradeTimer = document.getElementById("upgradeTimer");
@@ -3314,7 +3319,7 @@ document.getElementById("devCloseButton").addEventListener("click", function() {
     document.getElementById("developmentPanel").classList.remove("open");
 });
 
-document.querySelectorAll(".devBuilding").forEach(function(el) {
+document.querySelectorAll(".developmentBuildingImage").forEach(function(el) {
     el.addEventListener("click", function() {
         openBuildingActions(this.dataset.building);
     });
