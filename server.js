@@ -41,6 +41,38 @@ async function persistAttackToUsers(attacker, defender){
   await saveUser(defender);
 }
 
+function findAttackPair(id){
+  const key=String(id);
+  let attacker=null, defender=null, attack=null;
+  for(const user of db.users){
+    for(const a of (Array.isArray(user.state?.activeAttacks)?user.state.activeAttacks:[])){
+      if(String(a.id)!==key) continue;
+      if(a.role==='attacker'){ attacker=user; attack=a; }
+      if(a.role==='defender'){ defender=user; }
+    }
+  }
+  return {attacker,defender,attack};
+}
+
+function mergeServerAttacks(currentState, incomingState){
+  const incoming=normalizeState(incomingState);
+  const current=Array.isArray(currentState?.activeAttacks)?currentState.activeAttacks:[];
+  const currentById=new Map(current.map(a=>[String(a.id),a]));
+  const merged=[];
+  for(const a of incoming.activeAttacks){
+    const old=currentById.get(String(a.id));
+    if(old?.battleEndedAt) merged.push(old);
+    else merged.push(a);
+    currentById.delete(String(a.id));
+  }
+  // A client PUT must never erase a server-created march/attack that is still active.
+  for(const a of currentById.values()){
+    if(!a.battleEndedAt) merged.push(a);
+  }
+  incoming.activeAttacks=merged.slice(0,100);
+  return incoming;
+}
+
 function hashPassword(password,salt=crypto.randomBytes(16).toString('hex')){
   return {salt,hash:crypto.scryptSync(password,salt,64).toString('hex')};
 }
@@ -372,7 +404,7 @@ const server=http.createServer(async(req,res)=>{
       const travelSeconds=Math.max(60,int(input.travelSeconds,Math.round(distance*60)));
       const now=Date.now();
       const attackId=crypto.randomUUID();
-      const defenderSetup=sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army);
+      const defenderSetup={slots:sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army)};
       u.state.gold-=cost;
       for(const type of UNIT_TYPES) u.state.army[type]-=composition[type];
       const attack={id:attackId,attackerId:u.id,targetId:defender.id,attackerName:u.username,targetName:defender.username,distance,remaining:travelSeconds,totalTravel:travelSeconds,arrivalAt:now+travelSeconds*1000,status:'traveling',role:'attacker',slots,composition,defenderSetup,attackCost:cost,createdAt:now};
@@ -391,6 +423,10 @@ const server=http.createServer(async(req,res)=>{
       let changed=false;
       for(const a of outgoing){
         if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; changed=true; }
+        if(a.status==='arrived' && !a.battleStartedAt){
+          const defender=db.users.find(x=>String(x.id)===String(a.targetId));
+          if(defender){ a.defenderSetup={slots:sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army)}; changed=true; }
+        }
       }
       if(changed) await saveUser(u);
       const result=outgoing.map(a=>attackForClient(a, u, db.users.find(x=>String(x.id)===String(a.targetId))));
@@ -402,7 +438,11 @@ const server=http.createServer(async(req,res)=>{
       const incoming=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.filter(a=>a.role==='defender'&&!a.battleEndedAt):[];
       let changed=false;
       for(const a of incoming){
-        if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; a.defenderSetup=sanitizeDefenseSlots(u.state.defenderSetups?.self?.slots,u.state.army); changed=true; }
+        if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; a.defenderSetup={slots:sanitizeDefenseSlots(u.state.defenderSetups?.self?.slots,u.state.army)}; changed=true; }
+        else if(a.status==='arrived' && !a.battleStartedAt){
+          a.defenderSetup={slots:sanitizeDefenseSlots(u.state.defenderSetups?.self?.slots,u.state.army)};
+          changed=true;
+        }
       }
       if(changed) await saveUser(u);
       const result=[];
@@ -413,12 +453,46 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{attacks:result});
     }
 
+    if(req.url.match(/^\/api\/attacks\/[^/]+\/start$/)&&req.method==='POST'){
+      const id=req.url.split('/')[3];
+      const pair=findAttackPair(id);
+      if(!pair.attacker || !pair.defender || !pair.attack) return send(res,404,{error:'حمله پیدا نشد.'});
+      if(String(pair.attacker.id)!==String(u.id) && String(pair.defender.id)!==String(u.id)) return send(res,403,{error:'شما عضو این نبرد نیستید.'});
+      if(Number(pair.attack.arrivalAt)>Date.now()) return send(res,400,{error:'هنوز زمان رسیدن نیروها نرسیده است.'});
+      pair.attack.status='arrived';
+      pair.attack.remaining=0;
+      const attackerCopy=pair.attacker.state.activeAttacks.find(a=>String(a.id)===String(id)&&a.role==='attacker');
+      const defenderCopy=pair.defender.state.activeAttacks.find(a=>String(a.id)===String(id)&&a.role==='defender');
+      const setup=sanitizeDefenseSlots(pair.defender.state.defenderSetups?.self?.slots,pair.defender.state.army);
+      const startedAt=pair.attack.battleStartedAt || Date.now();
+      for(const copy of [pair.attack,attackerCopy,defenderCopy]) if(copy){ copy.status='battle'; copy.battleStartedAt=startedAt; copy.defenderSetup={slots:setup.map(x=>({...x}))}; }
+      await persistAttackToUsers(pair.attacker,pair.defender);
+      return send(res,200,{attack:attackForClient(pair.attack,pair.attacker,pair.defender)});
+    }
+
+    if(req.url.match(/^\/api\/attacks\/[^/]+\/finish$/)&&req.method==='POST'){
+      const id=req.url.split('/')[3];
+      const input=await body(req);
+      const pair=findAttackPair(id);
+      if(!pair.attacker || !pair.defender) return send(res,404,{error:'حمله پیدا نشد.'});
+      if(String(pair.attacker.id)!==String(u.id) && String(pair.defender.id)!==String(u.id)) return send(res,403,{error:'شما عضو این نبرد نیستید.'});
+      const finishedAt=Date.now();
+      const result={winner:Number(input.winner)===2?2:1,loser:Number(input.loser)===2?2:1,endReason:String(input.endReason||'پایان نبرد'),losses:input.losses||null};
+      for(const user of [pair.attacker,pair.defender]){
+        const copy=user.state.activeAttacks.find(a=>String(a.id)===String(id));
+        if(copy){ Object.assign(copy,result,{status:'finished',battleEndedAt:finishedAt,resultReadyAt:finishedAt}); }
+      }
+      await persistAttackToUsers(pair.attacker,pair.defender);
+      return send(res,200,{ok:true,attack:attackForClient(pair.attack,pair.attacker,pair.defender)});
+    }
+
     if(req.url.startsWith('/api/attacks/')&&req.method==='POST'){
       const id=req.url.split('/')[3];
       const incoming=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.find(a=>String(a.id)===String(id)&&a.role==='defender'):null;
       if(!incoming) return send(res,404,{error:'حمله پیدا نشد.'});
       if(Number(incoming.arrivalAt)>Date.now()) return send(res,400,{error:'هنوز زمان رسیدن نیروها نرسیده است.'});
       incoming.status='arrived'; incoming.remaining=0;
+      incoming.defenderSetup={slots:sanitizeDefenseSlots(u.state.defenderSetups?.self?.slots,u.state.army)};
       await saveUser(u);
       return send(res,200,{attack:incoming});
     }
@@ -426,8 +500,9 @@ const server=http.createServer(async(req,res)=>{
     if(req.url==='/api/state'&&req.method==='PUT'){
       const incoming=await body(req);
       // Server time is authoritative. The client cannot choose savedAt or use a browser clock
-      // to manufacture offline gold.
-      u.state=normalizeState(incoming);
+      // to manufacture offline gold. Preserve server-side attack lifecycle so a stale client
+      // cannot resurrect an already-finished warning or erase an active march.
+      u.state=mergeServerAttacks(u.state,incoming);
       u.state.savedAt=Date.now();
       u.lastStateAt=u.state.savedAt;
       await saveUser(u);
