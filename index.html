@@ -226,25 +226,6 @@
         aspect-ratio: 1 / 1;
         height: 100%;
     }
-    .devBuilding {
-        position: absolute;
-        transform: translate(-50%, -50%);
-        box-sizing: border-box;
-        border: 2px solid transparent;
-        border-radius: 18px;
-        background: transparent;
-        color: transparent;
-        cursor: pointer;
-        user-select: none;
-        font-size: 0;
-        z-index: 6;
-        transition: background .15s, border-color .15s, box-shadow .15s;
-    }
-    .devBuilding:hover {
-        background: rgba(255,213,74,.12);
-        border-color: rgba(255,213,74,.75);
-        box-shadow: 0 0 18px rgba(255,213,74,.22);
-    }
           position: absolute;
         left: 50%;
         bottom: 8%;
@@ -261,7 +242,6 @@
         pointer-events: none;
         white-space: nowrap;
     }
-          .devBuilding[data-building="barracks2"] { width: 27%; height: 24%; }
       .buildingTimer {
         display: none;
         position: absolute;
@@ -874,7 +854,7 @@
                     <img id="developmentBarracks2" class="developmentLayer developmentBuildingImage" data-building="barracks2" src="images/development/development-barracks2.png" alt="سربازخانه ۲" loading="eager" draggable="false">
                     <img id="developmentGoldMine" class="developmentLayer developmentBuildingImage" data-building="goldMine" src="images/development/development-goldMine.png" alt="معدن طلا" loading="eager" draggable="false">
                     <span class="developmentLevelOverlay" id="level-castle" style="left:50%;top:32%;">1</span>
-                    <span class="developmentLevelOverlay" id="level-wall" style="left:50%;top:9%;">1</span>
+                    <span class="developmentLevelOverlay" id="level-wall" style="left:50%;top:11.5%;">1</span>
                     <span class="developmentLevelOverlay" id="level-barracks1" style="left:22%;top:52%;">1</span>
                     <span class="developmentLevelOverlay" id="level-barracks2" style="left:78%;top:52%;">1</span>
                     <span class="developmentLevelOverlay" id="level-goldMine" style="left:50%;top:67%;">1</span>
@@ -3319,11 +3299,67 @@ document.getElementById("devCloseButton").addEventListener("click", function() {
     document.getElementById("developmentPanel").classList.remove("open");
 });
 
-document.querySelectorAll(".developmentBuildingImage").forEach(function(el) {
-    el.addEventListener("click", function() {
-        openBuildingActions(this.dataset.building);
+// تشخیص کلیک بر اساس پیکسل‌های واقعی و غیرشفاف هر ساختمان؛
+// بنابراین قسمت‌های شفاف PNG باعث انتخاب ساختمان اشتباه نمی‌شوند.
+const developmentHitCanvases = new WeakMap();
+
+function getDevelopmentHitCanvas(img) {
+    let canvas = developmentHitCanvases.get(img);
+    if (canvas || !img.naturalWidth || !img.naturalHeight) return canvas || null;
+    canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    developmentHitCanvases.set(img, canvas);
+    return canvas;
+}
+
+function isDevelopmentPixelOpaque(img, clientX, clientY) {
+    const rect = img.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return false;
+
+    // همان object-fit: contain که روی تصویر اعمال شده است.
+    const scale = Math.min(rect.width / nw, rect.height / nh);
+    const renderedW = nw * scale;
+    const renderedH = nh * scale;
+    const offsetX = (rect.width - renderedW) / 2;
+    const offsetY = (rect.height - renderedH) / 2;
+    const x = clientX - rect.left - offsetX;
+    const y = clientY - rect.top - offsetY;
+
+    if (x < 0 || y < 0 || x >= renderedW || y >= renderedH) return false;
+
+    const px = Math.min(nw - 1, Math.max(0, Math.floor(x / scale)));
+    const py = Math.min(nh - 1, Math.max(0, Math.floor(y / scale)));
+    const canvas = getDevelopmentHitCanvas(img);
+    if (!canvas) return false;
+
+    const alpha = canvas.getContext("2d", { willReadFrequently: true })
+        .getImageData(px, py, 1, 1).data[3];
+    return alpha > 20;
+}
+
+const developmentBuildingImages = Array.from(document.querySelectorAll(".developmentBuildingImage"));
+const developmentScene = document.getElementById("developmentScene");
+if (developmentScene) {
+    developmentScene.addEventListener("click", function(event) {
+        // از بالاترین لایه به پایین‌ترین لایه بررسی می‌کنیم.
+        for (let i = developmentBuildingImages.length - 1; i >= 0; i--) {
+            const img = developmentBuildingImages[i];
+            if (isDevelopmentPixelOpaque(img, event.clientX, event.clientY)) {
+                openBuildingActions(img.dataset.building);
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+        }
     });
-});
+}
 
 document.getElementById("upgradeBuildingButton").addEventListener("click", function() {
     if (selectedDevelopmentBuilding && startBuildingUpgrade(selectedDevelopmentBuilding)) {
