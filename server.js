@@ -21,6 +21,26 @@ async function loadDB(){const rows=await supabaseRequest('players',{query:'?sele
 async function saveUser(user){const now=Date.now();user.state=normalizeState(user.state);user.state.savedAt=now;user.lastStateAt=now;await supabaseRequest('players',{method:'POST',query:'?on_conflict=id',prefer:'resolution=merge-duplicates',body:{id:user.id,username:user.username,password_hash:user.passwordHash,password_salt:user.salt,castle_cell:user.cell}});await supabaseRequest('player_states',{method:'POST',query:'?on_conflict=player_id',prefer:'resolution=merge-duplicates',body:{player_id:user.id,gold:user.state.gold,buildings:user.state.buildings,army:user.state.army,active_upgrade:user.state.activeUpgrade,active_training:user.state.activeTraining,active_attacks:user.state.activeAttacks,pending_recoveries:user.state.pendingRecoveries,attack_restrictions:user.state.attackRestrictions,saved_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()}});await supabaseRequest('defender_setups',{method:'POST',query:'?on_conflict=player_id',prefer:'resolution=merge-duplicates',body:{player_id:user.id,setup:user.state.defenderSetups||{},updated_at:new Date(now).toISOString()}});}
 async function findUserByUsername(username){const rows=await supabaseRequest('players',{query:`?username=ilike.${encodeURIComponent(username)}&select=id,username,password_hash,password_salt,castle_cell`});if(!rows?.length)return null;const row=rows[0];const states=await supabaseRequest('player_states',{query:`?player_id=eq.${encodeURIComponent(row.id)}&select=gold,buildings,army,active_upgrade,active_training,active_attacks,pending_recoveries,attack_restrictions,saved_at`});const setups=await supabaseRequest('defender_setups',{query:`?player_id=eq.${encodeURIComponent(row.id)}&select=setup`});const s=states?.[0];return{id:String(row.id),username:row.username,salt:row.password_salt,passwordHash:row.password_hash,state:normalizeState({gold:s?.gold,buildings:s?.buildings,army:s?.army,activeUpgrade:s?.active_upgrade,activeTraining:s?.active_training,activeAttacks:s?.active_attacks,pendingRecoveries:s?.pending_recoveries,attackRestrictions:s?.attack_restrictions,defenderSetups:setups?.[0]?.setup||{},savedAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()}),cell:Number.isInteger(Number(row.castle_cell))?Number(row.castle_cell):null,lastStateAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()};}
 
+function sanitizeDefenseSlots(slots, army){
+  const valid=new Set(UNIT_TYPES);
+  const rem={archer:int(army?.archer),cavalry:int(army?.cavalry),swordsman:int(army?.swordsman)};
+  return Array.from({length:6},(_,i)=>{
+    const x=Array.isArray(slots)?(slots[i]||{}):{};
+    const type=valid.has(x.type)?x.type:'archer';
+    const requested=int(x.count);
+    const count=Math.min(requested,rem[type]);
+    rem[type]-=count;
+    return {type,count};
+  });
+}
+function attackForClient(a, attacker, defender){
+  return {...a, attackerName:attacker?.username||'مهاجم', defenderName:defender?.username||'مدافع', arrivalAt:Number(a.arrivalAt)||0};
+}
+async function persistAttackToUsers(attacker, defender){
+  await saveUser(attacker);
+  await saveUser(defender);
+}
+
 function hashPassword(password,salt=crypto.randomBytes(16).toString('hex')){
   return {salt,hash:crypto.scryptSync(password,salt,64).toString('hex')};
 }
@@ -334,6 +354,74 @@ const server=http.createServer(async(req,res)=>{
     const u=auth(req);
     if(!u)return send(res,401,{error:'ابتدا وارد حساب شوید.'});
     touch(u);
+
+    if(req.url==='/api/attack'&&req.method==='POST'){
+      const input=await body(req);
+      const defender=db.users.find(x=>String(x.id)===String(input.targetId));
+      if(!defender) return send(res,404,{error:'بازیکن هدف پیدا نشد.'});
+      if(String(defender.id)===String(u.id)) return send(res,400,{error:'نمی‌توانید به خودتان حمله کنید.'});
+      const slots=Array.isArray(input.slots)?input.slots.slice(0,6):[];
+      const composition={archer:0,cavalry:0,swordsman:0};
+      for(const slot of slots){ if(UNIT_TYPES.includes(slot?.type)) composition[slot.type]+=int(slot.count); }
+      const total=composition.archer+composition.cavalry+composition.swordsman;
+      const cost=Math.max(0,int(input.attackCost,total));
+      if(total<1) return send(res,400,{error:'حداقل یک نیرو برای حمله لازم است.'});
+      for(const type of UNIT_TYPES){ if(composition[type]>int(u.state.army[type])) return send(res,400,{error:`تعداد ${type} بیشتر از نیروهای موجود است.`}); }
+      if(Number(u.state.gold)<cost) return send(res,400,{error:'طلای کافی برای حمله وجود ندارد.'});
+      const distance=Math.max(1,num(input.distance,1));
+      const travelSeconds=Math.max(60,int(input.travelSeconds,Math.round(distance*60)));
+      const now=Date.now();
+      const attackId=crypto.randomUUID();
+      const defenderSetup=sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army);
+      u.state.gold-=cost;
+      for(const type of UNIT_TYPES) u.state.army[type]-=composition[type];
+      const attack={id:attackId,attackerId:u.id,targetId:defender.id,attackerName:u.username,targetName:defender.username,distance,remaining:travelSeconds,totalTravel:travelSeconds,arrivalAt:now+travelSeconds*1000,status:'traveling',role:'attacker',slots,composition,defenderSetup,attackCost:cost,createdAt:now};
+      const incoming={...attack,role:'defender',remaining:travelSeconds};
+      u.state.activeAttacks=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks:[];
+      defender.state.activeAttacks=Array.isArray(defender.state.activeAttacks)?defender.state.activeAttacks:[];
+      u.state.activeAttacks.push(attack);
+      defender.state.activeAttacks.push(incoming);
+      await persistAttackToUsers(u,defender);
+      return send(res,201,{ok:true,attack,state:u.state});
+    }
+
+    if(req.url==='/api/attacks/outgoing'&&req.method==='GET'){
+      const now=Date.now();
+      const outgoing=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.filter(a=>a.role==='attacker'&&!a.battleEndedAt):[];
+      let changed=false;
+      for(const a of outgoing){
+        if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; changed=true; }
+      }
+      if(changed) await saveUser(u);
+      const result=outgoing.map(a=>attackForClient(a, u, db.users.find(x=>String(x.id)===String(a.targetId))));
+      return send(res,200,{attacks:result});
+    }
+
+    if(req.url==='/api/attacks/incoming'&&req.method==='GET'){
+      const now=Date.now();
+      const incoming=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.filter(a=>a.role==='defender'&&!a.battleEndedAt):[];
+      let changed=false;
+      for(const a of incoming){
+        if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; a.defenderSetup=sanitizeDefenseSlots(u.state.defenderSetups?.self?.slots,u.state.army); changed=true; }
+      }
+      if(changed) await saveUser(u);
+      const result=[];
+      for(const a of incoming){
+        const attacker=db.users.find(x=>String(x.id)===String(a.attackerId));
+        result.push(attackForClient(a,attacker,u));
+      }
+      return send(res,200,{attacks:result});
+    }
+
+    if(req.url.startsWith('/api/attacks/')&&req.method==='POST'){
+      const id=req.url.split('/')[3];
+      const incoming=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.find(a=>String(a.id)===String(id)&&a.role==='defender'):null;
+      if(!incoming) return send(res,404,{error:'حمله پیدا نشد.'});
+      if(Number(incoming.arrivalAt)>Date.now()) return send(res,400,{error:'هنوز زمان رسیدن نیروها نرسیده است.'});
+      incoming.status='arrived'; incoming.remaining=0;
+      await saveUser(u);
+      return send(res,200,{attack:incoming});
+    }
 
     if(req.url==='/api/state'&&req.method==='PUT'){
       const incoming=await body(req);

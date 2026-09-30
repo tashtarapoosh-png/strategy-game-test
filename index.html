@@ -381,7 +381,7 @@
 }
 #playerMapPanel.open{display:flex}
 #playerMapInner{
-  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden; display:flex; flex-direction:column;
+  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden;
   background:linear-gradient(180deg,#18212b,#0e151c); color:#fff; border:1px solid rgba(255,255,255,.16);
   border-radius:18px; box-shadow:0 20px 70px rgba(0,0,0,.55); padding:18px; box-sizing:border-box;
 }
@@ -434,7 +434,7 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;width:100%;min-width:0;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;flex:1}
+.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:scroll;align-content:start;width:max-content;min-width:624px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
 .worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}.worldCell .castleFallback{display:block;font-size:34px;line-height:42px;height:42px;text-align:center}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -494,7 +494,7 @@
   .playerMapHeader{gap:5px}
   .playerMapHeader h2{font-size:15px}
   .playerMapLegend{font-size:9px;gap:5px}
-  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:0;width:100%;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:auto;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain;flex:1}
+  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:624px;width:max-content;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:scroll;overflow-x:scroll;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
   .worldCell{min-height:54px;padding:2px}
   .worldCell img{width:28px;height:28px}.worldCell .castleFallback{font-size:24px;line-height:28px;height:28px}
   .worldCell span{font-size:8px}
@@ -1191,6 +1191,7 @@ let executing =
 // وضعیت حضور بازیکنان؛ در نسخه آنلاین از سرور به‌روزرسانی می‌شود.
 let playerConnected = { 1: true, 2: false };
 let localPlayer = 1;
+let currentBattleRole = 1;
 
 
 /* ===============================
@@ -1198,10 +1199,8 @@ let localPlayer = 1;
 ================================ */
 
 document.getElementById("cameraTestButton").addEventListener("click", function () {
-    localPlayer = localPlayer === 1 ? 2 : 1;
-    this.textContent = localPlayer === 1 ? "🔄 نمای مقابل" : "🔄 بازگشت به نمای ۱";
-    selectedPiece = null;
-    draw();
+    // دوربین آزمایشی دیگر مالکیت نیروها را عوض نمی‌کند.
+    setDevMessage("🔒 کنترل نبرد فقط برای صاحب این حساب فعال است.");
 });
 
 
@@ -1960,7 +1959,7 @@ canvas.addEventListener(
         if (selectedPiece) {
 
             // فقط صاحب مهره و فقط وقتی متصل است می‌تواند حرکت بدهد.
-            if (selectedPiece.player !== localPlayer || !playerConnected[localPlayer]) {
+            if (selectedPiece.player !== currentBattleRole || !playerConnected[currentBattleRole]) {
                 selectedPiece = null;
                 draw();
                 return;
@@ -2019,7 +2018,7 @@ canvas.addEventListener(
         if (clickedPiece) {
 
             // کنترل مهره دشمن ممنوع است.
-            if (clickedPiece.player === localPlayer && playerConnected[localPlayer]) {
+            if (clickedPiece.player === currentBattleRole && playerConnected[currentBattleRole]) {
                 selectedPiece = clickedPiece;
             } else {
                 selectedPiece = null;
@@ -3260,7 +3259,9 @@ setInterval(function() {
             developmentState.army[type] = (Number(developmentState.army[type]) || 0) + Math.max(0,Math.floor(Number(attack.composition?.[type])||0));
         }
     });
-    arrived.forEach(startBattle);
+    // نبرد از طرف سرور و بر اساس نقش حساب آغاز می‌شود؛ اینجا فقط رسیدن محلی را ثبت می‌کنیم.
+    // مدافع از /api/attacks/incoming و مهاجم از /api/attacks/outgoing وضعیت را می‌گیرد.
+    arrived.forEach(function(attack){ attack.status = "arrived"; });
 
     capGold();
     updateDevelopmentUI();
@@ -3446,8 +3447,7 @@ async function loadOnlineWorldPlayers(){
     renderPlayerWorld();
   } catch (error) {
     console.error("بارگذاری بازیکنان نقشه ناموفق بود:", error);
-    // Keep the map usable even if the online player request temporarily fails.
-    if (!Array.isArray(worldPlayers) || worldPlayers.length === 0) buildWorldPlayers();
+    // Keep already-loaded real players visible; never replace them with fake players on API failure.
     renderPlayerWorld();
   }
 }
@@ -3677,34 +3677,23 @@ function updateAttackSummary(){
   return {totals,total};
 }
 
-function launchAttack(){
+async function launchAttack(){
   const panel=document.getElementById("attackPanel");
   const targetId=String(panel.dataset.targetId || "");
   const target=worldPlayers.find(p=>String(p.id)===targetId);
   if(!target) return;
   const restriction=developmentState.attackRestrictions[String(target.id)];
   const now=Date.now();
-  const attackerId=worldPlayers.find(p=>p.self)?.id || 1;
+  const attackerId=worldPlayers.find(p=>p.self)?.id;
   if(restriction){
-    if(Number(restriction.attackerId)===attackerId && Number(restriction.attackerUntil||0)>now){
-      alert("شما تا ۲۴ ساعت نمی‌توانید دوباره به این قلعه حمله کنید."); return;
-    }
-    if(Number(restriction.allUntil||0)>now && Number(restriction.attackerId)!==attackerId){
-      alert("این قلعه برای بازیکنان دیگر تا ۶ ساعت قابل حمله نیست."); return;
-    }
+    if(String(restriction.attackerId)===String(attackerId) && Number(restriction.attackerUntil||0)>now){ alert("شما تا ۲۴ ساعت نمی‌توانید دوباره به این قلعه حمله کنید."); return; }
+    if(Number(restriction.allUntil||0)>now && String(restriction.attackerId)!==String(attackerId)){ alert("این قلعه برای بازیکنان دیگر تا ۶ ساعت قابل حمله نیست."); return; }
   }
   const summary=updateAttackSummary();
   const army=developmentState.army;
-  for(const t of Object.keys(summary.totals)){
-    if(summary.totals[t]>army[t]){
-      alert(`تعداد ${t} بیشتر از نیروهای موجود است.`); return;
-    }
-  }
+  for(const t of Object.keys(summary.totals)){ if(summary.totals[t]>army[t]){ alert(`تعداد ${t} بیشتر از نیروهای موجود است.`); return; } }
   if(summary.total<1){alert("حداقل یک نیرو برای حمله انتخاب کنید.");return;}
   if(developmentState.gold<summary.total){alert("طلای کافی برای اجرای فرمان حمله ندارید.");return;}
-
-  Object.keys(summary.totals).forEach(t=>developmentState.army[t]-=summary.totals[t]);
-  developmentState.gold-=summary.total;
   const distance=Number(panel.dataset.distance)||1;
   const travelSeconds=Math.max(60, Math.round(distance*60));
   const slots=[];
@@ -3713,23 +3702,18 @@ function launchAttack(){
     const count=Math.max(0,parseInt(document.getElementById("attackCount"+i).value)||0);
     slots.push({type,count});
   }
-  const attack={
-    id:Date.now()+Math.random(),
-    attackerId: attackerId,
-    attackerName: (worldPlayers.find(p=>p.self)?.name || developmentState.castleName || currentUsername || "قلعه مهاجم"),
-    targetId,
-    targetName:target.name,
-    distance, remaining:travelSeconds, totalTravel:travelSeconds,
-    slots,
-    composition:{archer:summary.totals.archer,cavalry:summary.totals.cavalry,swordsman:summary.totals.swordsman},
-    defenderSetup:{slots:[{type:"archer",count:50},{type:"cavalry",count:50},{type:"swordsman",count:50},{type:"archer",count:50},{type:"cavalry",count:50},{type:"swordsman",count:50}]}
-  };
-  developmentState.activeAttacks.push(attack);
-  saveDevelopmentState(); updateDevelopmentUI();
-  panel.classList.remove("open");
-  document.getElementById("developmentPanel").classList.add("open");
-  setDevMessage(`⚔️ ارتش به سمت ${target.name} اعزام شد. زمان رسیدن: ${formatDuration(travelSeconds)}`);
-  renderArmyMarches();
+  try{
+    const data=await onlineRequest('/attack',{method:'POST',body:JSON.stringify({targetId,slots,distance,travelSeconds,attackCost:summary.total})});
+    developmentState.gold=Number(data.state?.gold ?? (developmentState.gold-summary.total));
+    developmentState.army=data.state?.army || developmentState.army;
+    developmentState.activeAttacks=Array.isArray(data.state?.activeAttacks)?data.state.activeAttacks:developmentState.activeAttacks;
+    developmentState.attackRestrictions=data.state?.attackRestrictions || developmentState.attackRestrictions;
+    saveDevelopmentState(); updateDevelopmentUI();
+    panel.classList.remove("open");
+    document.getElementById("developmentPanel").classList.add("open");
+    setDevMessage(`⚔️ ارتش به سمت ${target.name} اعزام شد. زمان رسیدن: ${formatDuration(travelSeconds)}`);
+    renderArmyMarches();
+  }catch(e){ alert(e.message || "اعزام حمله انجام نشد."); }
 }
 
 function fastArrivalForTesting(){
@@ -3764,116 +3748,46 @@ function renderArmyMarches(){
 let battleInputSlots = [];
 
 function startBattle(attack) {
-    /*
-       این تنها نقطه ورود نبرد از لشکرکشی است.
-       هیچ وضعیت نبردی هنگام بارگذاری صفحه ساخته نمی‌شود.
-       ورودی نبرد دقیقاً در لحظه رسیدن ارتش از attack.slots خوانده می‌شود.
-    */
     if (!attack || !Array.isArray(attack.slots)) return;
+    const validTypes = new Set(["archer", "cavalry", "swordsman"]);
+    const attackerSide = String(attack.attackerId) === String(worldPlayers.find(p=>p.self)?.id) ? 1 : 2;
+    currentBattleRole = attackerSide;
+    localPlayer = attackerSide;
+    // فقط صاحب این حساب اجازه کنترل طرف خودش را دارد؛ طرف مقابل فقط توسط منطق نبرد/سرور پیش می‌رود.
+    playerConnected = {1:attackerSide===1,2:attackerSide===2};
 
-    const slots = attack.slots;
     const attackers = pieces.filter(p => p.player === 1);
     const defenders = pieces.filter(p => p.player === 2);
+    attackers.forEach((piece,i)=>{ piece.x=250+(i%6)*100; piece.y=350; piece._moveFrom=null; piece._moveStartedAt=0; piece.target=null; piece._plannedMoveRound=null; });
+    defenders.forEach((piece,i)=>{ piece.x=250+(i%6)*100; piece.y=1550; piece._moveFrom=null; piece._moveStartedAt=0; piece.target=null; piece._plannedMoveRound=null; });
 
-    // هر نبرد از خط شروع خودش آغاز می‌شود؛ موقعیت نبرد قبلی هرگز به نبرد بعدی منتقل نمی‌شود.
-    attackers.forEach((piece, i) => {
-        piece.x = 250 + (i % 6) * 100;
-        piece.y = 350;
-        piece._moveFrom = null; piece._moveStartedAt = 0; piece.target = null;
-        piece._plannedMoveRound = null;
-    });
-    defenders.forEach((piece, i) => {
-        piece.x = 250 + (i % 6) * 100;
-        piece.y = 1550;
-        piece._moveFrom = null; piece._moveStartedAt = 0; piece.target = null;
-        piece._plannedMoveRound = null;
-    });
-    const validTypes = new Set(["archer", "cavalry", "swordsman"]);
-
-    // ساخت آرایش مهاجم در همین لحظه؛ هیچ عدد قبلی از setupCounts استفاده نمی‌شود.
-    for (let i = 0; i < 6; i++) {
-        const piece = attackers[i];
-        if (!piece) continue;
-
-        const slot = slots[i] || {};
-        const type = validTypes.has(slot.type) ? slot.type : "archer";
-        const count = Math.max(0, Math.floor(Number(slot.count) || 0));
-
-        piece.type = type;
-        piece.count = count;
-        piece._battleInitialCount = count;
-        piece.health = count * stats[type].unitHealth;
-        piece.command = count > 0 ? "battle" : "dead";
-        piece.target = null;
+    for(let i=0;i<6;i++){
+      const piece=attackers[i]; if(!piece) continue;
+      const slot=attack.slots[i]||{}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
+      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null;
     }
-
-    // مدافع دقیقاً با همان ۶ لاین ذخیره‌شده وارد میدان می‌شود.
-    const defenseSlots = attack.defenderSetup && Array.isArray(attack.defenderSetup.slots)
-        ? attack.defenderSetup.slots.slice(0,6)
-        : ["archer","cavalry","swordsman","archer","cavalry","swordsman"].map(type=>({type,count:50}));
-
-    // نیروهای اختصاص‌داده‌شده به دفاع فقط از حساب خودِ مدافع کنار گذاشته می‌شوند.
-    // در نسخه فعلی، وقتی بازیکن محلی مدافع باشد این کسر انجام می‌شود؛
-    // در غیر این صورت این نیروها متعلق به حساب بازیکن دیگر/سرور هستند.
-    if (!attack.defenseReserved) {
-        if (localPlayer === 2) {
-            for (const slot of defenseSlots) {
-                const type = validTypes.has(slot.type) ? slot.type : "archer";
-                const count = Math.max(0, Math.floor(Number(slot.count) || 0));
-                developmentState.army[type] = Math.max(0, (Number(developmentState.army[type]) || 0) - count);
-            }
-        }
-        attack.defenseReserved = true;
+    const defenseSlots=(attack.defenderSetup&&Array.isArray(attack.defenderSetup.slots))?attack.defenderSetup.slots.slice(0,6):[];
+    for(let i=0;i<6;i++){
+      const piece=defenders[i]; if(!piece) continue;
+      const slot=defenseSlots[i]||{type:"archer",count:0}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
+      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null;
     }
-    defenders.forEach((piece, i) => {
-        const slot = defenseSlots[i] || {type:"archer",count:0};
-        const type = validTypes.has(slot.type) ? slot.type : "archer";
-        const count = Math.max(0, Math.floor(Number(slot.count) || 0));
-        piece.type = type;
-        piece.count = count;
-        piece._battleInitialCount = count;
-        piece.health = count * stats[type].unitHealth;
-        piece.command = count > 0 ? "battle" : "dead";
-        piece.target = null;
-    });
-
-    // این داده‌ها فقط پس از شروع واقعی نبرد ایجاد می‌شوند.
-    attack.attackCost = Math.max(0, Math.floor(Number(attack.attackCost) || attack.composition?.archer + attack.composition?.cavalry + attack.composition?.swordsman || 0));
-    window.currentBattleAttack = attack;
-    window.currentBattleSlots = slots.slice(0, 6).map(slot => ({
-        type: validTypes.has(slot.type) ? slot.type : "archer",
-        count: Math.max(0, Math.floor(Number(slot.count) || 0))
-    }));
-
-    selectedPiece = null;
-    const resultEl = document.getElementById("battleResult");
-    if (resultEl) resultEl.style.display = "none";
-    round = 1;
-    timeLeft = 20;
-    gameStarted = true;
-    executing = false;
-    movementAnimationRunning = false;
-    const retreatControls = document.getElementById("battleRetreatControls");
-    if (retreatControls) {
-        retreatControls.classList.add("open");
-        retreatControls.querySelectorAll("[data-retreat-player]").forEach(btn => {
-            btn.style.display = Number(btn.dataset.retreatPlayer) === localPlayer ? "inline-block" : "none";
-        });
-    }
-
-    const developmentPanel = document.getElementById("developmentPanel");
-    const armyMarches = document.getElementById("armyMarches");
-    if (developmentPanel) developmentPanel.classList.remove("open");
-    if (armyMarches) armyMarches.innerHTML = "";
-
+    attack.attackCost=Math.max(0,Math.floor(Number(attack.attackCost)||0));
+    window.currentBattleAttack=attack; window.currentBattleSlots=attack.slots.slice(0,6);
+    selectedPiece=null; const resultEl=document.getElementById("battleResult"); if(resultEl) resultEl.style.display="none";
+    round=1; timeLeft=20; gameStarted=true; executing=false; movementAnimationRunning=false;
+    const retreatControls=document.getElementById("battleRetreatControls");
+    if(retreatControls){ retreatControls.classList.add("open"); retreatControls.querySelectorAll("[data-retreat-player]").forEach(btn=>btn.style.display=Number(btn.dataset.retreatPlayer)===currentBattleRole?"inline-block":"none"); }
+    document.getElementById("developmentPanel")?.classList.remove("open");
+    document.getElementById("armyMarches")?.replaceChildren();
     draw();
-    setDevMessage("نبرد ارتش شما آغاز شد.");
+    setDevMessage(currentBattleRole===1?"⚔️ نبرد آغاز شد؛ شما مهاجم هستید.":"🛡️ حمله به قلعه شما رسید؛ شما مدافع هستید.");
 }
 
 function closeMapAndReturn(){document.getElementById("playerMapPanel").classList.remove("open");document.getElementById("developmentPanel").classList.add("open");}
 
-document.getElementById("playerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");if(onlineToken){loadOnlineWorldPlayers();}else{renderPlayerWorld();}});
-document.getElementById("developmentPlayerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");if(onlineToken){loadOnlineWorldPlayers();}else{renderPlayerWorld();}});
+document.getElementById("playerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
+document.getElementById("developmentPlayerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
 document.getElementById("closePlayerMapButton").addEventListener("click",closeMapAndReturn);
 document.getElementById("closeSelectedPlayerButton").addEventListener("click",function(){selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
 document.getElementById("attackSelectedPlayerButton").onclick = function(e){ e.preventDefault(); e.stopImmediatePropagation(); openAttackPanel(); };
@@ -3917,6 +3831,39 @@ document.querySelectorAll("[data-retreat-player]").forEach(function(btn){
   });
 });
 for(let i=0;i<6;i++){document.getElementById("attackType"+i).addEventListener("change",updateAttackSummary);document.getElementById("attackCount"+i).addEventListener("input",updateAttackSummary);}
+async function pollIncomingAttacks(){
+  if(!onlineToken || gameStarted) return;
+  try{
+    const data=await onlineRequest('/attacks/incoming');
+    const attacks=Array.isArray(data.attacks)?data.attacks:[];
+    const active=attacks.filter(a=>a.status==='traveling' || a.status==='arrived');
+    if(active.length){
+      let box=document.getElementById('incomingAttackNotice');
+      if(!box){ box=document.createElement('div'); box.id='incomingAttackNotice'; box.style.cssText='position:fixed;top:15px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(120,0,0,.96);border:2px solid #ffd54a;border-radius:12px;padding:12px 16px;color:#fff;font-weight:700;max-width:90vw;'; document.body.appendChild(box); }
+      const a=active[0]; const remain=Math.max(0,Math.ceil((Number(a.arrivalAt)||Date.now()-Date.now())/1000));
+      box.innerHTML=`⚠️ حمله به قلعه شما<br><span style="font-size:13px">مهاجم: ${a.attackerName||'ناشناس'} | ${a.status==='arrived'?'نیروها رسیده‌اند':'زمان رسیدن: '+formatDuration(Math.max(0,Math.ceil((Number(a.arrivalAt)-Date.now())/1000)))}</span>`;
+      if(a.status==='arrived'){ const btn=document.createElement('button'); btn.textContent='🛡️ ورود به نبرد'; btn.style.cssText='margin-top:8px;padding:7px 12px;border-radius:8px;cursor:pointer;'; btn.onclick=()=>{box.remove(); startBattle(a);}; box.appendChild(document.createElement('br')); box.appendChild(btn); }
+    }
+  }catch(e){}
+}
+async function pollOutgoingAttacks(){
+  if(!onlineToken || gameStarted) return;
+  try{
+    const data=await onlineRequest('/attacks/outgoing');
+    const attacks=Array.isArray(data.attacks)?data.attacks:[];
+    const arrived=attacks.find(a=>a.status==='arrived' && !a.battleEndedAt);
+    if(arrived){
+      // فقط مهاجمِ صاحب همین حساب نبرد را باز می‌کند.
+      const selfId=worldPlayers.find(p=>p.self)?.id;
+      if(String(arrived.attackerId)===String(selfId)) startBattle(arrived);
+    }
+  }catch(e){}
+}
+setInterval(pollIncomingAttacks,3000);
+setInterval(pollOutgoingAttacks,3000);
+pollIncomingAttacks();
+pollOutgoingAttacks();
+
 renderPlayerWorld();
 </script>
 
