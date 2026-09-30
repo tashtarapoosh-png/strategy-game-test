@@ -576,18 +576,61 @@
   #playerMapPanel #closePlayerMapButton{width:34px !important;height:34px !important;min-width:34px !important;min-height:34px !important;margin-top:34px !important;font-size:25px !important}
 }
 
-/* compact right side battle controls */
-#developmentButton,#playerMapButton,#battleRetreatControls,.mapActionRow,#cameraTestButton{
-  position:fixed;
+/* کنترل‌های صحنه اصلی: فقط داخل gameContainer و کوچک، بدون اثر روی لاگین و پنل‌های دیگر */
+#gameContainer > #cameraTestButton{
+  position:absolute;
+  top:58px;
   right:8px;
-  z-index:120;
+  z-index:20;
+  width:82px;
+  min-height:30px;
+  height:30px;
+  padding:4px 6px;
+  font-size:10px;
+  box-sizing:border-box;
 }
-#developmentButton{top:120px;width:92px;padding:6px;font-size:11px;}
-#playerMapButton{top:165px;width:92px;padding:6px;font-size:11px;}
-#battleRetreatControls{top:210px;right:8px;left:auto;bottom:auto;display:none;flex-direction:column;gap:4px;}
-#battleRetreatControls.open{display:flex;}
-.battleRetreatButton{width:92px;min-height:32px;padding:4px 6px;font-size:11px;}
-#cameraTestButton{right:8px;top:75px;width:92px;height:32px;}
+#gameContainer > #developmentButton{
+  position:absolute;
+  top:94px;
+  right:8px;
+  left:auto;
+  z-index:20;
+  width:82px;
+  padding:5px 6px;
+  font-size:10px;
+  box-sizing:border-box;
+}
+#gameContainer > #playerMapButton{
+  position:absolute;
+  top:130px;
+  right:8px;
+  bottom:auto;
+  z-index:20;
+  width:82px;
+  min-height:30px;
+  padding:5px 6px;
+  font-size:10px;
+  box-sizing:border-box;
+}
+#gameContainer > #battleRetreatControls{
+  position:absolute;
+  top:166px;
+  right:8px;
+  left:auto;
+  bottom:auto;
+  z-index:20;
+  display:none;
+  flex-direction:column;
+  gap:4px;
+  align-items:stretch;
+}
+#gameContainer > #battleRetreatControls.open{display:flex;}
+#gameContainer > #battleRetreatControls .battleRetreatButton{
+  width:82px;
+  min-height:30px;
+  padding:4px 5px;
+  font-size:10px;
+}
 
 </style>
 </head>
