@@ -404,7 +404,7 @@
 }
 #playerMapPanel.open{display:flex}
 #playerMapInner{
-  width:min(1100px,96vw); height:min(760px,92vh); overflow:auto;
+  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden;
   background:linear-gradient(180deg,#18212b,#0e151c); color:#fff; border:1px solid rgba(255,255,255,.16);
   border-radius:18px; box-shadow:0 20px 70px rgba(0,0,0,.55); padding:18px; box-sizing:border-box;
 }
@@ -412,7 +412,7 @@
 .playerMapHeader h2{margin:0}
 .playerMapLegend{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;opacity:.9}
 .playerWorld{
-  position:relative; min-height:540px; margin-top:14px; border-radius:16px; overflow:hidden;
+  position:relative; min-height:540px; margin-top:14px; border-radius:16px; overflow:auto;
   background:
     linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px),
     linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
@@ -3579,9 +3579,13 @@ function buildWorldPlayers(){
 }
 
 function getWorldSize(){
-  // نقشه همیشه به اندازه‌ای بزرگ باشد که روی موبایل واقعاً قابل اسکرول باشد.
-  // 10 ستون داریم و حداقل 400 خانه یعنی 40 ردیف.
-  return Math.max(400, 100 + Math.max(0, worldPlayers.length - 1) * 10);
+  // نقشه باید همه موقعیت‌های واقعی بازیکنان را در خود جا بدهد؛
+  // اگر سرور cell بزرگ‌تری از محدوده پایه فرستاد، آن بازیکن نباید حذف شود.
+  const maxPlayerCell = Array.isArray(worldPlayers) && worldPlayers.length
+    ? Math.max(0, ...worldPlayers.map(p => Number.isFinite(Number(p.cell)) ? Math.floor(Number(p.cell)) : 0))
+    : 0;
+  const minimumCells = Math.max(400, 100 + Math.max(0, worldPlayers.length - 1) * 10);
+  return Math.max(minimumCells, maxPlayerCell + 1);
 }
 
 function renderPlayerWorld(){
