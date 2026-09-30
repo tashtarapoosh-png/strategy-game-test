@@ -3521,33 +3521,31 @@ async function loadOnlineWorldPlayers(){
   try {
     const data = await onlineRequest("/players", { method: "GET" });
     const serverPlayers = Array.isArray(data.players) ? data.players : [];
+    const layout = Array.isArray(data.cellLayout) ? data.cellLayout : [];
     const selfId = String(data.selfId ?? "");
+    const layoutById = new Map(layout.map(p => [String(p.id), p]));
 
-    // Use the server's real player list; do not generate fake opponents when it succeeds.
-    worldPlayers = serverPlayers.map((p, index) => ({
-      id: String(p.id),
-      name: String(p.username || "بازیکن"),
-      level: Math.max(1, Number(p.castleLevel) || 1),
-      status: p.online ? "آنلاین" : "آفلاین",
-      online: Boolean(p.online),
-      self: String(p.id) === selfId,
-      cell: Number.isFinite(Number(p.cell)) ? Math.max(0, Number(p.cell)) : index
-    }));
+    // مختصات نقشه فقط از سرور/SQL می‌آید. هیچ موقعیت تصادفی یا جابه‌جایی
+    // برای بازیکنان واقعی انجام نمی‌دهیم.
+    worldPlayers = serverPlayers.map((p, index) => {
+      const lp = layoutById.get(String(p.id));
+      const cell = Number.isFinite(Number(p.cell)) ? Math.max(0, Number(p.cell)) : index;
+      return {
+        id: String(p.id),
+        name: String(p.username || "بازیکن"),
+        level: Math.max(1, Number(p.castleLevel) || 1),
+        status: p.online ? "آنلاین" : "آفلاین",
+        online: Boolean(p.online),
+        self: String(p.id) === selfId,
+        cell,
+        gridX: Number.isFinite(Number(lp?.x)) ? Number(lp.x) : cell % 10,
+        gridY: Number.isFinite(Number(lp?.y)) ? Number(lp.y) : Math.floor(cell / 10)
+      };
+    });
 
-    // Avoid overlapping castles if older server records have duplicate/missing cells.
-    const used = new Set();
-    let nextCell = 0;
-    for (const player of worldPlayers) {
-      if (used.has(player.cell)) {
-        while (used.has(nextCell)) nextCell++;
-        player.cell = nextCell;
-      }
-      used.add(player.cell);
-    }
     renderPlayerWorld();
   } catch (error) {
     console.error("بارگذاری بازیکنان نقشه ناموفق بود:", error);
-    // Keep already-loaded real players visible; never replace them with fake players on API failure.
     renderPlayerWorld();
   }
 }
@@ -3561,72 +3559,69 @@ function buildWorldPlayers(){
   const realCount = Math.max(1, getRegisteredUserCount());
   const names = ["فرمانده شمال","شاهین سرخ","اتحاد شرق","قلعه سنگی","فرمانده غرب","سپاه جنوب","دژ آذر","شاهزادگان شرق","اتحاد سبز","نگهبانان مرز"];
   worldPlayers = [];
-
-  // برای تست، وقتی فقط یک حساب وجود دارد یک حریف آزمایشی هم داریم.
-  // در حالت چندحسابی، فقط حساب‌های واقعی بازیکنان نمایش داده می‌شوند.
   const count = realCount === 1 ? 2 : realCount;
   for(let i=0;i<count;i++){
     const id = i+1;
     const isSelf = i===0;
     const name = isSelf ? (currentUsername || "شما") : (realCount === 1 ? "بازیکن آزمایشی" : (names[(i-1)%names.length] + (i>names.length ? " "+id : "")));
-    // جای‌گذاری تصادفی قلعه‌ها با فاصله از هم
     let cell;
-    do {
-      cell = Math.floor(Math.random() * getWorldSize());
-    } while (worldPlayers.some(p => Math.abs(p.cell - cell) < 5));
-    worldPlayers.push({id,name,level:1,status:isSelf?"آنلاین":"آفلاین",self:isSelf,cell});
+    do { cell = Math.floor(Math.random() * getWorldSize()); }
+    while (worldPlayers.some(p => Math.abs(p.cell - cell) < 5));
+    worldPlayers.push({id,name,level:1,status:isSelf?"آنلاین":"آفلاین",self:isSelf,cell,gridX:cell%10,gridY:Math.floor(cell/10)});
   }
 }
 
+function getWorldBounds(){
+  if (!Array.isArray(worldPlayers) || !worldPlayers.length) return {minX:0,maxX:9,minY:0,maxY:39};
+  const xs=worldPlayers.map(p=>Number(p.gridX)).filter(Number.isFinite);
+  const ys=worldPlayers.map(p=>Number(p.gridY)).filter(Number.isFinite);
+  const minX=Math.min(0,...xs), maxX=Math.max(9,...xs);
+  const minY=Math.min(0,...ys), maxY=Math.max(39,...ys);
+  return {minX,maxX,minY,maxY};
+}
+
 function getWorldSize(){
-  // نقشه باید همه موقعیت‌های واقعی بازیکنان را در خود جا بدهد؛
-  // اگر سرور cell بزرگ‌تری از محدوده پایه فرستاد، آن بازیکن نباید حذف شود.
-  const maxPlayerCell = Array.isArray(worldPlayers) && worldPlayers.length
-    ? Math.max(0, ...worldPlayers.map(p => Number.isFinite(Number(p.cell)) ? Math.floor(Number(p.cell)) : 0))
-    : 0;
-  const minimumCells = Math.max(400, 100 + Math.max(0, worldPlayers.length - 1) * 10);
-  return Math.max(minimumCells, maxPlayerCell + 1);
+  const b=getWorldBounds();
+  return Math.max(400,(b.maxX-b.minX+1)*(b.maxY-b.minY+1));
 }
 
 function renderPlayerWorld(){
   const world=document.getElementById("playerWorld"); if(!world) return;
-  if ((!Array.isArray(worldPlayers) || worldPlayers.length === 0) && !onlineToken) {
-    buildWorldPlayers();
-  }
-  world.classList.add("gridWorld"); world.innerHTML="";
-  const totalCells=getWorldSize();
-  const castlesByCell=new Map(worldPlayers.map(p=>[p.cell,p]));
-  for(let cell=0;cell<totalCells;cell++){
-    const owner=castlesByCell.get(cell) || null;
-    const el=document.createElement("button");
-    el.type="button";
-    el.className="worldCell"+(owner&&owner.self?" self":"")+(owner&&selectedWorldPlayer===owner.id?" selected":"");
-    if(owner){
-      el.innerHTML=`<img src="images/castle.png" alt="قلعه" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class="castleFallback">🏰</span>')"><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
-      el.addEventListener("click",(e)=>{
-        e.preventDefault(); e.stopPropagation();
-        selectWorldPlayer(owner.id);
-        if(!owner.self){
-          selectedWorldPlayer=owner.id;
-        }
-      });
-      if(!owner.self && selectedWorldPlayer===owner.id){
-        const attack=document.createElement("button");
-        attack.type="button";
-        attack.className="cellAttackBtn";
-        attack.textContent="⚔️ حمله";
-        attack.addEventListener("click",(e)=>{
-          e.preventDefault(); e.stopPropagation();
-          selectedWorldPlayer=owner.id;
-          openAttackPanel();
-        });
-        el.appendChild(attack);
+  if ((!Array.isArray(worldPlayers) || worldPlayers.length === 0) && !onlineToken) buildWorldPlayers();
 
+  world.classList.add("gridWorld");
+  world.innerHTML="";
+
+  const bounds=getWorldBounds();
+  const cols=bounds.maxX-bounds.minX+1;
+  const rows=bounds.maxY-bounds.minY+1;
+  world.style.gridTemplateColumns=`repeat(${cols},60px)`;
+  world.style.gridTemplateRows=`repeat(${rows},72px)`;
+
+  const castlesByCoord=new Map(worldPlayers.map(p=>[`${p.gridX},${p.gridY}`,p]));
+  for(let y=bounds.minY;y<=bounds.maxY;y++){
+    for(let x=bounds.minX;x<=bounds.maxX;x++){
+      const owner=castlesByCoord.get(`${x},${y}`) || null;
+      const el=document.createElement("button");
+      el.type="button";
+      el.className="worldCell"+(owner&&owner.self?" self":"")+(owner&&selectedWorldPlayer===owner.id?" selected":"");
+      if(owner){
+        el.innerHTML=`<img src="images/castle.png" alt="قلعه" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class="castleFallback">🏰</span>')"><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
+        el.addEventListener("click",(e)=>{
+          e.preventDefault(); e.stopPropagation(); selectWorldPlayer(owner.id);
+          if(!owner.self) selectedWorldPlayer=owner.id;
+        });
+        if(!owner.self && selectedWorldPlayer===owner.id){
+          const attack=document.createElement("button");
+          attack.type="button"; attack.className="cellAttackBtn"; attack.textContent="⚔️ حمله";
+          attack.addEventListener("click",(e)=>{e.preventDefault();e.stopPropagation();selectedWorldPlayer=owner.id;openAttackPanel();});
+          el.appendChild(attack);
+        }
+      } else {
+        el.innerHTML=`<span style="display:block;margin-top:20px;opacity:.35;">زمین خالی</span>`;
       }
-    } else {
-      el.innerHTML=`<span style="display:block;margin-top:20px;opacity:.35;">زمین خالی</span>`;
+      world.appendChild(el);
     }
-    world.appendChild(el);
   }
 }
 
