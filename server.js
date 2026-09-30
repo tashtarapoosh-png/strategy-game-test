@@ -9,54 +9,17 @@ const PORT = process.env.PORT || 3000;
 
 // On Render, set DATA_DIR to the mount path of a Persistent Disk.
 // Locally it falls back to this project directory.
-const DATA_DIR = process.env.DATA_DIR || process.env.RENDER_DISK_PATH || __dirname;
-fs.mkdirSync(DATA_DIR, {recursive:true});
-const DB = process.env.DB_PATH || path.join(DATA_DIR, 'data.json');
-
-const BASE_WORLD_CELLS = 100; // 10 x 10
-const CELLS_PER_PLAYER = 10;
-const DEVELOPMENT_MAX_LEVEL = 5;
-const BASE_GOLD_PER_MINUTE = 100;
-const STARTING_GOLD = 3000;
-const BASE_TRAINING_CAPACITY = 10;
-const BASE_TRAINING_TIME_SECONDS = 60;
-const UNIT_TYPES = ['archer','cavalry','swordsman'];
-const BUILDING_TYPES = ['castle','wall','barracks1','barracks2','goldMine'];
-
-const sessions = new Map();
-const online = new Map();
-
-const initialState = () => ({
-  gold: STARTING_GOLD,
-  buildings:{castle:{level:1},wall:{level:1},barracks1:{level:1},barracks2:{level:1},goldMine:{level:1}},
-  army:{archer:100,cavalry:100,swordsman:100},
-  activeUpgrade:null,
-  activeTraining:{barracks1:null,barracks2:null},
-  activeAttacks:[],
-  defenderSetups:{},
-  pendingRecoveries:[],
-  attackRestrictions:{},
-  savedAt:Date.now()
-});
-
-function loadDB(){
-  try {
-    const parsed = JSON.parse(fs.readFileSync(DB,'utf8'));
-    if (!parsed || !Array.isArray(parsed.users)) throw new Error('bad db');
-    if (!Number.isInteger(parsed.nextId) || parsed.nextId < 1) parsed.nextId = 1;
-    return parsed;
-  } catch {
-    return {nextId:1,users:[]};
-  }
-}
-
-let db=loadDB();
-
-function saveDB(){
-  const tmp = `${DB}.tmp`;
-  fs.writeFileSync(tmp,JSON.stringify(db,null,2),'utf8');
-  fs.renameSync(tmp,DB);
-}
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || '';
+if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error('SUPABASE_URL و SUPABASE_SECRET_KEY باید در Environment تنظیم شوند.');
+const BASE_WORLD_CELLS = 100; const CELLS_PER_PLAYER = 10; const DEVELOPMENT_MAX_LEVEL = 5; const BASE_GOLD_PER_MINUTE = 100; const STARTING_GOLD = 3000; const BASE_TRAINING_CAPACITY = 10; const BASE_TRAINING_TIME_SECONDS = 60; const UNIT_TYPES = ['archer','cavalry','swordsman']; const BUILDING_TYPES = ['castle','wall','barracks1','barracks2','goldMine'];
+const sessions = new Map(); const online = new Map();
+const initialState = () => ({gold:STARTING_GOLD,buildings:{castle:{level:1},wall:{level:1},barracks1:{level:1},barracks2:{level:1},goldMine:{level:1}},army:{archer:100,cavalry:100,swordsman:100},activeUpgrade:null,activeTraining:{barracks1:null,barracks2:null},activeAttacks:[],defenderSetups:{},pendingRecoveries:[],attackRestrictions:{},savedAt:Date.now()});
+let db={nextId:1,users:[]};
+async function supabaseRequest(table,{method='GET',query='',body=null,prefer=''}={}){const headers={apikey:SUPABASE_SECRET_KEY,Authorization:`Bearer ${SUPABASE_SECRET_KEY}`,'Content-Type':'application/json'};if(prefer)headers.Prefer=prefer;const response=await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`,{method,headers,body:body===null?undefined:JSON.stringify(body)});const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text;}if(!response.ok)throw new Error(`Supabase ${method} ${table} failed (${response.status}): ${typeof data==='string'?data:JSON.stringify(data)}`);return data;}
+async function loadDB(){const rows=await supabaseRequest('players',{query:'?select=id,username,password_hash,password_salt,castle_cell'});const states=await supabaseRequest('player_states',{query:'?select=player_id,gold,buildings,army,active_upgrade,active_training,active_attacks,pending_recoveries,attack_restrictions,saved_at'});const setups=await supabaseRequest('defender_setups',{query:'?select=player_id,setup'});const stateMap=new Map(states.map(r=>[String(r.player_id),r]));const setupMap=new Map(setups.map(r=>[String(r.player_id),r.setup||{}]));db.users=rows.map(row=>{const s=stateMap.get(String(row.id));const state=normalizeState({gold:s?.gold,buildings:s?.buildings,army:s?.army,activeUpgrade:s?.active_upgrade,activeTraining:s?.active_training,activeAttacks:s?.active_attacks,pendingRecoveries:s?.pending_recoveries,attackRestrictions:s?.attack_restrictions,defenderSetups:setupMap.get(String(row.id))||{},savedAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()});return{id:String(row.id),username:row.username,salt:row.password_salt,passwordHash:row.password_hash,state,cell:Number.isInteger(Number(row.castle_cell))?Number(row.castle_cell):null,lastStateAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()};});return db;}
+async function saveUser(user){const now=Date.now();user.state=normalizeState(user.state);user.state.savedAt=now;user.lastStateAt=now;await supabaseRequest('players',{method:'POST',query:'?on_conflict=id',prefer:'resolution=merge-duplicates',body:{id:user.id,username:user.username,password_hash:user.passwordHash,password_salt:user.salt,castle_cell:user.cell}});await supabaseRequest('player_states',{method:'POST',query:'?on_conflict=player_id',prefer:'resolution=merge-duplicates',body:{player_id:user.id,gold:user.state.gold,buildings:user.state.buildings,army:user.state.army,active_upgrade:user.state.activeUpgrade,active_training:user.state.activeTraining,active_attacks:user.state.activeAttacks,pending_recoveries:user.state.pendingRecoveries,attack_restrictions:user.state.attackRestrictions,saved_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()}});await supabaseRequest('defender_setups',{method:'POST',query:'?on_conflict=player_id',prefer:'resolution=merge-duplicates',body:{player_id:user.id,setup:user.state.defenderSetups||{},updated_at:new Date(now).toISOString()}});}
+async function findUserByUsername(username){const rows=await supabaseRequest('players',{query:`?username=ilike.${encodeURIComponent(username)}&select=id,username,password_hash,password_salt,castle_cell`});if(!rows?.length)return null;const row=rows[0];const states=await supabaseRequest('player_states',{query:`?player_id=eq.${encodeURIComponent(row.id)}&select=gold,buildings,army,active_upgrade,active_training,active_attacks,pending_recoveries,attack_restrictions,saved_at`});const setups=await supabaseRequest('defender_setups',{query:`?player_id=eq.${encodeURIComponent(row.id)}&select=setup`});const s=states?.[0];return{id:String(row.id),username:row.username,salt:row.password_salt,passwordHash:row.password_hash,state:normalizeState({gold:s?.gold,buildings:s?.buildings,army:s?.army,activeUpgrade:s?.active_upgrade,activeTraining:s?.active_training,activeAttacks:s?.active_attacks,pendingRecoveries:s?.pending_recoveries,attackRestrictions:s?.attack_restrictions,defenderSetups:setups?.[0]?.setup||{},savedAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()}),cell:Number.isInteger(Number(row.castle_cell))?Number(row.castle_cell):null,lastStateAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()};}
 
 function hashPassword(password,salt=crypto.randomBytes(16).toString('hex')){
   return {salt,hash:crypto.scryptSync(password,salt,64).toString('hex')};
@@ -300,7 +263,7 @@ const server=http.createServer(async(req,res)=>{
       const p=hashPassword(password);
       const now=Date.now();
       const u={
-        id:String(db.nextId++),
+        id:crypto.randomUUID(),
         username,
         salt:p.salt,
         passwordHash:p.hash,
@@ -310,7 +273,7 @@ const server=http.createServer(async(req,res)=>{
       };
       u.state.savedAt=now;
       db.users.push(u);
-      saveDB();
+      await saveUser(u);
 
       const t=token();
       sessions.set(t,u.id);
@@ -320,13 +283,13 @@ const server=http.createServer(async(req,res)=>{
 
     if(req.url==='/api/login'&&req.method==='POST'){
       const {username,password}=await body(req);
-      const u=db.users.find(x=>x.username.toLowerCase()===String(username||'').toLowerCase());
+      const u=await findUserByUsername(String(username||'').trim());
       if(!u||!checkPassword(String(password||''),u))
         return send(res,401,{error:'نام کاربری یا رمز عبور نادرست است.'});
 
       applyOfflineProgress(u);
       if(!Number.isInteger(u.cell)||u.cell<0||u.cell>=getWorldSize()) u.cell=assignCell();
-      saveDB();
+      await saveUser(u);
 
       const t=token();
       sessions.set(t,u.id);
@@ -335,41 +298,37 @@ const server=http.createServer(async(req,res)=>{
     }
 
     // Public static files must be served before authentication.
-    if(req.method==='GET'){
+    if(req.method==='GET') {
       const requestPath=new URL(req.url,`http://${req.headers.host||'localhost'}`).pathname;
       let fileName=null;
-
-      if(requestPath==='/' || requestPath==='/index.html' || requestPath==='/ghalee1.png'){
-        fileName=requestPath==='/'?'index.html':requestPath.slice(1);
-      }else if(requestPath.startsWith('/images/')){
-        fileName=requestPath.slice(1);
-      }
-
+      if(requestPath==='/'||requestPath==='/index.html'||requestPath==='/ghalee1.png') fileName=requestPath==='/'?'index.html':requestPath.slice(1);
+      else if(requestPath.startsWith('/images/')) fileName=requestPath.slice(1);
       if(fileName){
         const filePath=path.resolve(__dirname,fileName);
         const imagesRoot=path.resolve(__dirname,'images');
-        const isAllowedRoot=fileName==='index.html' || fileName==='ghalee1.png';
-        const isAllowedImage=filePath.startsWith(imagesRoot+path.sep);
-
-        if(isAllowedRoot || isAllowedImage){
-          if(fs.existsSync(filePath) && fs.statSync(filePath).isFile()){
+        const allowedRoot=fileName==='index.html'||fileName==='ghalee1.png';
+        const allowedImage=filePath.startsWith(imagesRoot+path.sep);
+        if(allowedRoot||allowedImage){
+          if(fs.existsSync(filePath)&&fs.statSync(filePath).isFile()){
             const ext=path.extname(filePath).toLowerCase();
-            const types={
-              '.html':'text/html; charset=utf-8',
-              '.png':'image/png',
-              '.jpg':'image/jpeg',
-              '.jpeg':'image/jpeg',
-              '.webp':'image/webp',
-              '.gif':'image/gif',
-              '.svg':'image/svg+xml'
-            };
-            const type=types[ext]||'application/octet-stream';
-            res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});
+            const types={'.html':'text/html; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.svg':'image/svg+xml'};
+            res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-cache'});
             return fs.createReadStream(filePath).pipe(res);
           }
           return send(res,404,{error:'فایل پیدا نشد.'});
         }
       }
+    }
+    if(req.method==='GET' && (req.url==='/' || req.url==='/index.html' || req.url==='/ghalee1.png')){
+      const fileName=req.url==='/'?'index.html':req.url.slice(1);
+      const filePath=path.join(__dirname,fileName);
+      if(fs.existsSync(filePath)){
+        const ext=path.extname(filePath).toLowerCase();
+        const type=ext==='.html'?'text/html; charset=utf-8':ext==='.png'?'image/png':'application/octet-stream';
+        res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});
+        return fs.createReadStream(filePath).pipe(res);
+      }
+      return send(res,404,{error:'فایل پیدا نشد.'});
     }
 
     const u=auth(req);
@@ -383,13 +342,13 @@ const server=http.createServer(async(req,res)=>{
       u.state=normalizeState(incoming);
       u.state.savedAt=Date.now();
       u.lastStateAt=u.state.savedAt;
-      saveDB();
+      await saveUser(u);
       return send(res,200,{ok:true,state:u.state});
     }
 
     if(req.url==='/api/state'&&req.method==='GET'){
       applyOfflineProgress(u);
-      saveDB();
+      await saveUser(u);
       return send(res,200,{state:u.state});
     }
 
@@ -410,4 +369,6 @@ setInterval(()=>{
   for(const [id,t] of online) if(now-t>15000) online.delete(id);
 },5000);
 
+await loadDB();
+console.log(`Loaded ${db.users.length} player(s) from Supabase.`);
 server.listen(PORT,()=>console.log(`Strategy game server running on port ${PORT}`));
