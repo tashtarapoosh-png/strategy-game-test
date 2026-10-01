@@ -2358,6 +2358,16 @@ function showBatmanTable(batId, rows) {
     note.textContent = "در این مرحله هیچ نبردی انجام نشده است؛ اطلاعات فقط ثبت شده‌اند.";
     note.style.cssText = "margin-top:10px;font-size:12px;opacity:.8;";
     resultEl.appendChild(note);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "✖ بستن";
+    closeBtn.style.cssText = "display:block;margin:14px auto 0;padding:8px 22px;border:1px solid rgba(255,255,255,.35);border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;";
+    closeBtn.onclick = function () {
+        resultEl.style.display = "none";
+    };
+    resultEl.appendChild(closeBtn);
+
     resultEl.style.display = "block";
 }
 
@@ -2424,10 +2434,21 @@ function batman() {
         ]);
     });
 
-    // مدافع: اطلاعات از آرایش دفاعی قلعه مورد حمله.
-    const defenseSlots = Array.isArray(attack.defenderSetup?.slots)
-        ? attack.defenderSetup.slots.slice(0, 6)
-        : [];
+    // مدافع: ابتدا آرایش همراه خود حمله؛ اگر نبود، آرایش دفاعی قلعه مدافع
+    // از وضعیت دفاعی همان قلعه گرفته می‌شود. برای قلعه خودمان، منبع اصلی
+    // developmentState.defenderSetups.self است.
+    let defenseSlots = [];
+    if (Array.isArray(attack.defenderSetup?.slots)) {
+        defenseSlots = attack.defenderSetup.slots.slice(0, 6);
+    } else {
+        const ownDefense = developmentState.defenderSetups?.self?.slots;
+        const targetIsOwnCastle = String(attack.targetId || "") === String(localPlayer || "");
+        if (targetIsOwnCastle && Array.isArray(ownDefense)) {
+            defenseSlots = ownDefense.slice(0, 6);
+        } else if (Array.isArray(attack.defenseSlots)) {
+            defenseSlots = attack.defenseSlots.slice(0, 6);
+        }
+    }
 
     defenseSlots.forEach(function (slot) {
         const type = validTypes.has(slot?.type) ? slot.type : null;
@@ -3169,7 +3190,8 @@ function processDevelopmentElapsed(seconds) {
         }
     });
     capGold();
-    finishedAttacks.forEach(startBattle);
+    // حمله‌ای که در حالت آفلاین به پایان مسیر می‌رسد، نباید خودکار وارد نبرد شود.
+    // ورود به مرحله نبرد فقط از مسیر مشخص‌شده برای همان حمله انجام می‌شود.
 }
 
 function getGoldProductionPerMinute() {
