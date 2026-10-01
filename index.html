@@ -412,7 +412,7 @@
 }
 #playerMapPanel.open{display:flex}
 #playerMapInner{
-  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden;
+  width:min(1100px,96vw); height:min(760px,92vh); overflow:auto;
   background:linear-gradient(180deg,#18212b,#0e151c); color:#fff; border:1px solid rgba(255,255,255,.16);
   border-radius:18px; box-shadow:0 20px 70px rgba(0,0,0,.55); padding:18px; box-sizing:border-box;
 }
@@ -525,7 +525,7 @@
   .devModal button{margin:3px 0;padding:7px;font-size:12px}
   .timerBox{margin-top:5px;padding:6px;font-size:11px}
   #playerMapPanel{padding:6px}
-  #playerMapInner{width:100%;height:calc(100vh - 12px);padding:8px;border-radius:10px;overflow:hidden}
+  #playerMapInner{width:100%;height:calc(100vh - 12px);padding:8px;border-radius:10px;overflow:auto}
   .playerMapHeader{gap:5px}
   .playerMapHeader h2{font-size:15px}
   .playerMapLegend{font-size:9px;gap:5px}
@@ -1249,6 +1249,20 @@ let executing =
 let playerConnected = { 1: true, 2: false };
 let localPlayer = 1;
 let currentBattleRole = 1;
+
+// مالکیت واقعی مهره با شناسه حساب تعیین می‌شود؛ نقش ۱/۲ فقط برای نمایش و منطق نبرد است.
+function getBattleLocalUserId(){
+    const self=Array.isArray(worldPlayers)?worldPlayers.find(p=>p.self):null;
+    return self ? String(self.id) : "";
+}
+
+function canControlPiece(piece) {
+    const selfId=getBattleLocalUserId();
+    return !!piece && !!selfId
+        && String(piece.ownerId||"") === selfId
+        && Number(piece.player) === Number(currentBattleRole)
+        && playerConnected[currentBattleRole] === true;
+}
 
 
 /* ===============================
@@ -2016,7 +2030,7 @@ canvas.addEventListener(
         if (selectedPiece) {
 
             // فقط صاحب مهره و فقط وقتی متصل است می‌تواند حرکت بدهد.
-            if (selectedPiece.player !== localPlayer || !playerConnected[localPlayer]) {
+            if (!canControlPiece(selectedPiece)) {
                 selectedPiece = null;
                 draw();
                 return;
@@ -2075,7 +2089,7 @@ canvas.addEventListener(
         if (clickedPiece) {
 
             // کنترل مهره دشمن ممنوع است.
-            if (clickedPiece.player === localPlayer && playerConnected[localPlayer]) {
+            if (canControlPiece(clickedPiece)) {
                 selectedPiece = clickedPiece;
             } else {
                 selectedPiece = null;
@@ -2103,7 +2117,7 @@ function executeMoves() {
 
     for (const piece of pieces) {
         // هیچ حرکت خودکاری وجود ندارد؛ فقط دستور move که بازیکن ثبت کرده اجرا می‌شود.
-        if (piece.player !== localPlayer || !playerConnected[localPlayer] || piece.health <= 0 || piece.command !== "move" || !piece.target) continue;
+        if (!canControlPiece(piece) || piece.health <= 0 || piece.command !== "move" || !piece.target) continue;
         if (piece._plannedMoveRound !== round && !piece._moveFrom) continue;
         moving = true;
 
@@ -3865,6 +3879,8 @@ function fastArrivalForTesting(){
     if (attack.returning) return;
     attack.remaining = Math.min(Math.max(1, Number(attack.remaining) || TEST_TRAVEL_SECONDS), TEST_TRAVEL_SECONDS);
     attack.totalTravel = TEST_TRAVEL_SECONDS;
+    attack.arrivalAt = Date.now() + attack.remaining * 1000;
+    attack.status = "traveling";
   });
   saveDevelopmentState();
   renderArmyMarches();
@@ -3875,8 +3891,7 @@ function updateAttackTravelTimer(){
   const timer=document.getElementById("attackTravelTimer");
   if(!timer) return;
   const attacks=Array.isArray(developmentState.activeAttacks)?developmentState.activeAttacks:[];
-  // تایمر مسیر فقط برای حساب مهاجم نمایش داده می‌شود؛ مدافع فقط هشدار حمله را می‌بیند.
-  const active=attacks.find(a=>a.role!=="defender" && !a.returning && Number(a.remaining)>0);
+  const active=attacks.find(a=>!a.returning && Number(a.remaining)>0);
   if(!active){
     timer.style.display="none";
     return;
@@ -3889,11 +3904,8 @@ function renderArmyMarches(){
   updateAttackTravelTimer();
   const box=document.getElementById("armyMarches");
   if(!box) return;
-  const attacks=Array.isArray(developmentState.activeAttacks)
-    ? developmentState.activeAttacks.filter(a=>a.role!=="defender")
-    : [];
-  if(!attacks.length){ box.innerHTML=""; return; }
-  box.innerHTML=attacks.map(a=>{
+  if(!developmentState.activeAttacks.length){ box.innerHTML=""; return; }
+  box.innerHTML=developmentState.activeAttacks.map(a=>{
     const pct=Math.max(0,Math.min(100,((a.totalTravel-a.remaining)/Math.max(1,a.totalTravel))*100));
     return `<div class="marchCard"><strong>${a.returning ? "↩️ بازگشت ارتش از " : "⚔️ حرکت به "}${a.targetName}</strong><div class="marchTimer">⏱ زمان باقی‌مانده: ${formatDuration(a.remaining)} | ${Math.floor(pct)}%</div><div style="font-size:11px;opacity:.8">🏹 ${a.composition.archer} | 🐎 ${a.composition.cavalry} | ⚔️ ${a.composition.swordsman}</div></div>`;
   }).join("");
@@ -3923,16 +3935,13 @@ function startBattle(attack) {
     for(let i=0;i<6;i++){
       const piece=attackers[i]; if(!piece) continue;
       const slot=attack.slots[i]||{}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
-      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null;
+      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null; piece.ownerId=String(attack.attackerId||""); piece.side="attacker";
     }
-    // در سمت مدافع، آرایش ذخیره‌شده خود حساب منبع اصلی است؛ نسخه داخل رکورد حمله فقط fallback است.
-    const ownDefenseSlots = developmentState.defenderSetups?.self?.slots;
-    const attackDefenseSlots = attack.defenderSetup?.slots;
-    const defenseSlots = (Array.isArray(ownDefenseSlots) ? ownDefenseSlots : (Array.isArray(attackDefenseSlots) ? attackDefenseSlots : [])).slice(0,6);
+    const defenseSlots=(attack.defenderSetup&&Array.isArray(attack.defenderSetup.slots))?attack.defenderSetup.slots.slice(0,6):[];
     for(let i=0;i<6;i++){
       const piece=defenders[i]; if(!piece) continue;
       const slot=defenseSlots[i]||{type:"archer",count:0}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
-      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null;
+      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null; piece.ownerId=String(attack.targetId||""); piece.side="defender";
     }
     attack.attackCost=Math.max(0,Math.floor(Number(attack.attackCost)||0));
     window.currentBattleAttack=attack; window.currentBattleSlots=attack.slots.slice(0,6);

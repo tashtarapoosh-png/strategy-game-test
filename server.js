@@ -369,14 +369,18 @@ const server=http.createServer(async(req,res)=>{
       for(const type of UNIT_TYPES){ if(composition[type]>int(u.state.army[type])) return send(res,400,{error:`تعداد ${type} بیشتر از نیروهای موجود است.`}); }
       if(Number(u.state.gold)<cost) return send(res,400,{error:'طلای کافی برای حمله وجود ندارد.'});
       const distance=Math.max(1,num(input.distance,1));
-      const travelSeconds=0;
+      // زمان حرکت از منطق بازی می‌آید، اما سرور آن را محدود و معتبر می‌کند.
+      // حداقل یک دقیقه برای هر واحد فاصله حفظ می‌شود تا حمله واقعاً در مسیر باشد.
+      const requestedTravelSeconds=Math.max(0,num(input.travelSeconds,0));
+      const travelSeconds=Math.max(60,Math.round(distance*60),Math.round(requestedTravelSeconds));
       const now=Date.now();
       const attackId=crypto.randomUUID();
       const defenderSetup=sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army);
       u.state.gold-=cost;
       for(const type of UNIT_TYPES) u.state.army[type]-=composition[type];
-      const attack={id:attackId,attackerId:u.id,targetId:defender.id,attackerName:u.username,targetName:defender.username,distance,remaining:travelSeconds,totalTravel:travelSeconds,arrivalAt:now,status:'arrived',role:'attacker',slots,composition,defenderSetup,attackCost:cost,createdAt:now};
-      const incoming={...attack,role:'defender',remaining:0};
+      const arrivalAt=now+travelSeconds*1000;
+      const attack={id:attackId,attackerId:u.id,targetId:defender.id,attackerName:u.username,targetName:defender.username,distance,remaining:travelSeconds,totalTravel:travelSeconds,arrivalAt,status:'traveling',role:'attacker',slots,composition,defenderSetup,attackCost:cost,createdAt:now};
+      const incoming={...attack,role:'defender',remaining:travelSeconds};
       u.state.activeAttacks=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks:[];
       defender.state.activeAttacks=Array.isArray(defender.state.activeAttacks)?defender.state.activeAttacks:[];
       u.state.activeAttacks.push(attack);
@@ -425,9 +429,23 @@ const server=http.createServer(async(req,res)=>{
 
     if(req.url==='/api/state'&&req.method==='PUT'){
       const incoming=await body(req);
-      // Server time is authoritative. The client cannot choose savedAt or use a browser clock
-      // to manufacture offline gold.
-      u.state=normalizeState(incoming);
+      // Server time is authoritative. Preserve server-side attack records so a delayed/stale
+      // browser save cannot erase an active attack or reset its arrival timer.
+      const previousAttacks=Array.isArray(u.state?.activeAttacks)?u.state.activeAttacks:[];
+      const normalized=normalizeState(incoming);
+      const localAttacks=Array.isArray(normalized.activeAttacks)?normalized.activeAttacks:[];
+      const localById=new Map(localAttacks.map(a=>[String(a.id||""),a]));
+      const mergedAttacks=previousAttacks.map(serverAttack=>{
+        const local=localById.get(String(serverAttack.id||""));
+        if(!local) return serverAttack;
+        return {...serverAttack,returning:!!local.returning,returnTarget:local.returnTarget||serverAttack.returnTarget,returnStartedAt:local.returnStartedAt||serverAttack.returnStartedAt};
+      });
+      for(const local of localAttacks){
+        const id=String(local.id||"");
+        if(id && !previousAttacks.some(a=>String(a.id||"")===id)) mergedAttacks.push(local);
+      }
+      normalized.activeAttacks=mergedAttacks.slice(0,100);
+      u.state=normalized;
       u.state.savedAt=Date.now();
       u.lastStateAt=u.state.savedAt;
       await saveUser(u);
