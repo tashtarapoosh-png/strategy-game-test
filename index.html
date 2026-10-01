@@ -2462,6 +2462,14 @@ function batman() {
     // خود وضعیت مهره‌های صحنه نیز دستکاری نمی‌شود.
 }
 
+
+// پایان نبرد: فعلاً فقط وضعیت «در حال جنگ» قلعه را آزاد می‌کند.
+// این تابع فعلاً از هیچ‌جا فراخوانی نمی‌شود و برای مرحله پایان واقعی نبرد نگه داشته شده است.
+function endbat(idcastel) {
+    if (!idcastel) return;
+    idcastel.inbat = false;
+}
+
 function executeBattles() {
 
     const attacks = [];
