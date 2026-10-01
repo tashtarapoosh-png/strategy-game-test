@@ -961,11 +961,11 @@
                     <button type="button" id="enterBattleFromDevelopmentButton" class="devStat">⚔️ ورود به صحنه نبرد</button>
                     <button type="button" id="developmentPlayerMapButton" class="devStat">🌍 نقشه بازیکنان</button>
                 </div>
+                <div id="armyMarches"></div>
                 <div class="developmentTopRow fastArrivalTopRow">
                     <button type="button" id="fastArrivalTestButton" class="devStat fastArrivalTopButton">⚡ رسیدن سریع نیرو (تست)</button>
                 </div>
             </div>
-            <div id="armyMarches"></div>
             <div id="developmentField">
                 <div id="developmentScene">
                     <img id="developmentBackground" class="developmentLayer" src="images/development/development-background.jpg" alt="زمینه قلعه" loading="eager" draggable="false">
@@ -1926,6 +1926,24 @@ function draw() {
             screen.y + 28
         );
 
+        // شناسه مالک در گوشه سمت راست هر واحد؛ رنگ مهره همچنان بر اساس تیم است.
+        const ownerLabel = String(piece.ownerId ?? "").trim();
+        if (ownerLabel) {
+            ctx.save();
+            ctx.font = "bold 10px Arial";
+            ctx.textAlign = "right";
+            ctx.textBaseline = "middle";
+            const badgeText = ownerLabel;
+            const badgeX = screen.x + 44;
+            const badgeY = screen.y - 38;
+            const badgeWidth = Math.max(34, ctx.measureText(badgeText).width + 8);
+            ctx.fillStyle = piece.side === 1 ? "rgba(25,105,210,.92)" : "rgba(190,45,45,.92)";
+            ctx.fillRect(badgeX - badgeWidth, badgeY - 8, badgeWidth, 16);
+            ctx.fillStyle = "#fff";
+            ctx.fillText(badgeText, badgeX - 4, badgeY);
+            ctx.restore();
+        }
+
 
         /*
           انتخاب
@@ -2885,6 +2903,8 @@ const ONLINE_API = (window.location.origin || "") + "/api";
 let onlineToken = sessionStorage.getItem("strategy_game_token") || null;
 let onlineMode = true;
 let onlineSaveTimer = null;
+let onlineSaveInFlight = false;
+let onlineSaveQueued = null;
 
 async function onlineRequest(path, options = {}) {
     const headers = {"Content-Type":"application/json", "Accept":"application/json", ...(options.headers || {})};
@@ -2961,6 +2981,27 @@ function capGold() {
     developmentState.gold = Math.min(developmentState.gold, getOfflineGoldCap());
 }
 
+async function flushOnlineDevelopmentSave() {
+    if (!onlineToken || onlineSaveInFlight || !onlineSaveQueued) return;
+    const snapshot = onlineSaveQueued;
+    onlineSaveQueued = null;
+    onlineSaveInFlight = true;
+    try {
+        await onlineRequest('/state', {method:'PUT', body:JSON.stringify(snapshot)});
+    } catch (e) {
+        // اگر این ذخیره شکست خورد، آخرین وضعیت را نگه می‌داریم تا تلاش بعدی آن را بفرستد.
+        if (!onlineSaveQueued || Number(onlineSaveQueued.savedAt || 0) < Number(snapshot.savedAt || 0)) {
+            onlineSaveQueued = snapshot;
+        }
+        console.warn('ذخیره آنلاین ناموفق بود:', e.message);
+    } finally {
+        onlineSaveInFlight = false;
+        if (onlineSaveQueued && onlineToken) {
+            void flushOnlineDevelopmentSave();
+        }
+    }
+}
+
 function saveDevelopmentState() {
     const snapshot = {
         gold: developmentState.gold,
@@ -2980,14 +3021,10 @@ function saveDevelopmentState() {
     }
     lastDevelopmentSave = Date.now();
     if (onlineToken) {
+        // فقط آخرین snapshot نگه داشته می‌شود؛ درخواست‌های ذخیره روی هم قرار نمی‌گیرند.
+        onlineSaveQueued = snapshot;
         clearTimeout(onlineSaveTimer);
-        onlineSaveTimer = setTimeout(async () => {
-            try {
-                await onlineRequest('/state', {method:'PUT', body:JSON.stringify(snapshot)});
-            } catch (e) {
-                console.warn('ذخیره آنلاین ناموفق بود:', e.message);
-            }
-        }, 250);
+        onlineSaveTimer = setTimeout(() => { void flushOnlineDevelopmentSave(); }, 250);
     }
 }
 
@@ -3385,7 +3422,6 @@ function startSelectedTraining() {
     document.getElementById("trainingPanel").classList.remove("open");
     setDevMessage(`${count} ${selectedTrainingType === "archer" ? "کماندار" : selectedTrainingType === "cavalry" ? "سواره‌نظام" : "شمشیرزن"} برای آموزش ثبت شد.`);
     updateDevelopmentUI();
-    saveDevelopmentState();
     saveDevelopmentState();
 }
 
@@ -4004,7 +4040,7 @@ function renderArmyMarches(){
   if(!developmentState.activeAttacks.length){ box.innerHTML=""; return; }
   box.innerHTML=developmentState.activeAttacks.map(a=>{
     const pct=Math.max(0,Math.min(100,((a.totalTravel-a.remaining)/Math.max(1,a.totalTravel))*100));
-    return `<div class="marchCard"><strong>${a.returning ? "↩️ بازگشت ارتش از " : "⚔️ حرکت به "}${a.targetName}</strong><div class="marchTimer">⏱ زمان باقی‌مانده: ${formatDuration(a.remaining)} | ${Math.floor(pct)}%</div><div style="font-size:11px;opacity:.8">🏹 ${a.composition.archer} | 🐎 ${a.composition.cavalry} | ⚔️ ${a.composition.swordsman}</div></div>`;
+    return `<div class="marchCard"><strong>${a.returning ? "↩️ بازگشت ارتش از " : "⚔️ نیروهای اعزامی به "}${a.targetName}</strong><div class="marchTimer">⏱ زمان رسیدن نیروها: ${formatDuration(a.remaining)} | ${Math.floor(pct)}%</div><div style="font-size:11px;opacity:.8">🏹 ${a.composition.archer} | 🐎 ${a.composition.cavalry} | ⚔️ ${a.composition.swordsman}</div></div>`;
   }).join("");
 }
 
@@ -4070,8 +4106,10 @@ function normalizeBattleParticipants(attack) {
     const normalize = (list, side) => (Array.isArray(list) ? list : []).flatMap((entry, participantIndex) => {
         const ownerId = String(entry?.id ?? entry?.playerId ?? entry?.ownerId ?? `unknown-${side}-${participantIndex}`);
         const slots = Array.isArray(entry?.slots) ? entry.slots : [];
+        const ownerName = String(entry?.username ?? entry?.name ?? "بازیکن");
+        const team = side === 1 ? "مهاجم" : "مدافع";
         return slots.slice(0, 6).map((slot, slotIndex) => ({
-            side, ownerId, slotIndex,
+            side, ownerId, ownerName, team, slotIndex,
             type: validBattleUnitType(slot?.type),
             count: Math.max(0, Math.floor(Number(slot?.count) || 0))
         }));
@@ -4086,10 +4124,12 @@ function validBattleUnitType(type) {
     return ["archer", "cavalry", "swordsman"].includes(type) ? type : "archer";
 }
 
-function resetBattlePiece(piece, side, ownerId, x, y) {
+function resetBattlePiece(piece, side, ownerId, x, y, ownerName="بازیکن") {
     piece.side = side;
     piece.player = side;
     piece.ownerId = String(ownerId);
+    piece.ownerName = String(ownerName || "بازیکن");
+    piece.team = side === 1 ? "مهاجم" : "مدافع";
     piece.x = x;
     piece.y = y;
     piece._moveFrom = null;
@@ -4098,6 +4138,73 @@ function resetBattlePiece(piece, side, ownerId, x, y) {
     piece.target = null;
     piece._plannedMoveRound = null;
     piece.command = "dead";
+}
+
+// هر بازیکن یک بلوک مستقل از ۶ خانه دارد تا نیروهای چند بازیکن در شروع نبرد
+// روی هم قرار نگیرند. مهاجمان در سمت چادر و مدافعان در سمت قلعه مستقر می‌شوند.
+function getBattleStartPosition(side, ownerId, slotIndex, allSlots) {
+    const owners = [];
+    for (const slot of allSlots || []) {
+        if (Number(slot.side) !== Number(side)) continue;
+        const id = String(slot.ownerId ?? "");
+        if (!owners.includes(id)) owners.push(id);
+    }
+
+    let ownerIndex = owners.indexOf(String(ownerId ?? ""));
+    if (ownerIndex < 0) ownerIndex = 0;
+
+    // هر بازیکن: ۳ ستون × ۲ ردیف = ۶ اسلات.
+    // سه بلوک در عرض میدان جا می‌گیرند و بازیکنان بعدی در ردیف بعدی می‌آیند.
+    const blockColumn = ownerIndex % 3;
+    const blockRow = Math.floor(ownerIndex / 3);
+    const slot = Math.max(0, Math.min(5, Number(slotIndex) || 0));
+    const slotColumn = slot % 3;
+    const slotRow = Math.floor(slot / 3);
+
+    const x = 1 + blockColumn * 3 + slotColumn;
+    const attackerBaseY = 2 + blockRow * 3;
+    const defenderBaseY = ROWS - 4 - blockRow * 3;
+    const y = Number(side) === 1
+        ? attackerBaseY + slotRow
+        : defenderBaseY - slotRow;
+
+    return {
+        x: Math.max(0, Math.min(COLS - 1, x)),
+        y: Math.max(0, Math.min(ROWS - 1, y))
+    };
+}
+
+function battleParticipantSlots(attack){
+    const participants = normalizeBattleParticipants(attack);
+    if(participants) return [...participants.attackers.map(s=>({...s,side:1})), ...participants.defenders.map(s=>({...s,side:2}))];
+    const attackers=Array.from({length:6},(_,i)=>{const x=attack.slots?.[i]||{};return {side:1,ownerId:String(attack.attackerId),ownerName:String(attack.attackerName||"مهاجم"),team:"مهاجم",slotIndex:i,type:validBattleUnitType(x.type),count:Math.max(0,Math.floor(Number(x.count)||0))};});
+    const defenders=Array.from({length:6},(_,i)=>{const x=attack.defenderSetup?.slots?.[i]||{};return {side:2,ownerId:String(attack.targetId),ownerName:String(attack.defenderName||"مدافع"),team:"مدافع",slotIndex:i,type:validBattleUnitType(x.type),count:Math.max(0,Math.floor(Number(x.count)||0))};});
+    return [...attackers,...defenders];
+}
+
+function mergeBattleParticipants(attack){
+    if(!gameStarted || !attack) return;
+    const slots=battleParticipantSlots(attack);
+    const existing=new Map(pieces.filter(p=>p.health>0||p._battleKey).map(p=>[p._battleKey,p]));
+    for(const slot of slots){
+        const key=`${slot.side}:${String(slot.ownerId)}:${slot.slotIndex}`;
+        if(existing.has(key)){
+            const p=existing.get(key);
+            if(p.health<=0 && slot.count>0){p.count=slot.count;p.health=slot.count*stats[p.type].unitHealth;p.command='battle';}
+            continue;
+        }
+        let piece=pieces.find(p=>!p._battleKey && p.health<=0);
+        if(!piece){piece={player:slot.side,side:slot.side,ownerId:'',type:'archer',x:0,y:0,count:0,health:0,command:'dead',target:null};pieces.push(piece);}
+        const pos=getBattleStartPosition(slot.side,slot.ownerId,slot.slotIndex,slots);
+        resetBattlePiece(piece,slot.side,slot.ownerId,pos.x*CELL_SIZE+CELL_SIZE/2,pos.y*CELL_SIZE+CELL_SIZE/2,slot.ownerName);
+        piece.type=validBattleUnitType(slot.type);
+        piece.count=Math.max(0,Math.floor(Number(slot.count)||0));
+        piece._battleInitialCount=piece.count;
+        piece.health=piece.count*stats[piece.type].unitHealth;
+        piece.command=piece.count>0?'battle':'dead';
+        piece._battleKey=key;
+    }
+    draw();
 }
 
 function startBattle(attack) {
@@ -4153,14 +4260,18 @@ function startBattle(attack) {
         pieces.push({player:1,side:1,ownerId:"",type:"archer",x:0,y:0,count:0,health:0,command:"dead",target:null});
     }
 
-    const sideIndex = {1:0,2:0};
     allSlots.forEach((slot, index) => {
-        const side = slot.side;
-        const i = sideIndex[side]++;
         const piece = pieces[index];
-        const x = 250 + (i % 6) * 100;
-        const y = side === 1 ? 350 : 1550;
-        resetBattlePiece(piece, side, slot.ownerId, x, y);
+        const pos = getBattleStartPosition(slot.side, slot.ownerId, slot.slotIndex, allSlots);
+        resetBattlePiece(
+            piece,
+            slot.side,
+            slot.ownerId,
+            pos.x * CELL_SIZE + CELL_SIZE / 2,
+            pos.y * CELL_SIZE + CELL_SIZE / 2,
+            slot.ownerName
+        );
+        piece._battleKey = `${slot.side}:${String(slot.ownerId)}:${slot.slotIndex}`;
         piece.type = validTypes.has(slot.type) ? slot.type : "archer";
         piece.count = Math.max(0, Math.floor(Number(slot.count) || 0));
         piece._battleInitialCount = piece.count;
@@ -4171,6 +4282,7 @@ function startBattle(attack) {
     attack.attackCost = Math.max(0, Math.floor(Number(attack.attackCost) || 0));
     window.currentBattleAttack = attack;
     window.currentBattleSlots = attack.slots?.slice(0,6) || [];
+    window.currentBattleInput = Array.isArray(attack.battleInput) ? attack.battleInput : [];
 
     selectedPiece = null;
     const resultEl = document.getElementById("battleResult");
@@ -4298,7 +4410,7 @@ async function pollIncomingAttacks(){
       // نبرد مستقل از حضور بازیکن ادامه دارد؛ اگر صفحه باز باشد فقط صحنه نبرد را نمایش می‌دهیم.
       if(a.status==='arrived' && !gameStarted) { box.remove(); startBattle(a); }
     }else{
-      box.innerHTML=`⚠️ حمله به قلعه شما<br><span style="font-size:13px">مهاجم: ${a.attackerName||'ناشناس'} | زمان رسیدن: ${formatDuration(Math.max(0,Math.ceil((Number(a.arrivalAt)-Date.now())/1000)))}</span>`;
+      box.innerHTML=`⚠️ حمله به شما : <span style="font-size:13px">${formatDuration(Math.max(0,Math.ceil((Number(a.arrivalAt)-Date.now())/1000)))}</span><br><span style="font-size:12px">مهاجم: ${a.attackerName||'ناشناس'}</span>`;
     }
   }catch(e){}
 }
@@ -4318,6 +4430,7 @@ async function pollActiveBattleState(){
   if(!onlineToken || !gameStarted || !window.currentBattleAttack?.id) return;
   try{
     const shared=await getSharedBattle(window.currentBattleAttack);
+    if(shared?.battleParticipants) mergeBattleParticipants(shared);
     if(shared?.battleEndedAt){
       const loser=Number(shared.loser)===2?2:1;
       const result = shared.endReason==='عقب‌نشینی' ? 'retreat' : (shared.endReason==='آتش بس' ? 'ceasefire' : 'elimination');
@@ -4325,8 +4438,8 @@ async function pollActiveBattleState(){
     }
   }catch(e){}
 }
-setInterval(pollIncomingAttacks,3000);
-setInterval(pollOutgoingAttacks,3000);
+setInterval(pollIncomingAttacks,1000);
+setInterval(pollOutgoingAttacks,1000);
 setInterval(pollActiveBattleState,2000);
 pollIncomingAttacks();
 pollOutgoingAttacks();
