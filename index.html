@@ -163,42 +163,21 @@
     }
     #developmentTopbar {
         display: flex;
-        flex-direction: column;
-        gap: 7px;
-        align-items: stretch;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
         justify-content: center;
         background: #111;
         border-radius: 10px;
-        padding: 8px;
-        margin-bottom: 10px;
+        padding: 10px;
+        margin-bottom: 12px;
         font-size: 15px;
     }
-    .developmentTopRow {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 7px;
-        direction: rtl;
-    }
-    .developmentTopRow.twoButtons {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
     .devStat {
-        min-width: 0;
         padding: 7px 10px;
         border: 1px solid #666;
         border-radius: 8px;
         background: #202020;
-        color: #fff;
-        font: inherit;
-        line-height: 1.25;
-        text-align: center;
-        box-sizing: border-box;
-    }
-    button.devStat {
-        cursor: pointer;
-    }
-    button.devStat:hover {
-        background: #2b2b2b;
     }
     #developmentField {
         position: relative;
@@ -223,19 +202,7 @@
 
     #developmentBackground { z-index: 1; }
     #developmentWall { z-index: 2; }
-    .developmentBuildingImage { z-index: 3; pointer-events: auto; cursor: pointer; }
-    .developmentLevelOverlay {
-        position: absolute; z-index: 7; transform: translate(-50%, -50%);
-        min-width: 30px; padding: 3px 7px; border-radius: 8px;
-        background: rgba(0,0,0,.82); color: #fff; font-size: 14px; font-weight: bold;
-        line-height: 1.2; text-align: center; pointer-events: none; user-select: none; box-sizing: border-box;
-    }
-    .developmentTimerOverlay {
-        position: absolute; z-index: 8; transform: translateX(-50%); display: none;
-        min-width: 118px; padding: 6px 9px; border: 2px solid #ffd54a; border-radius: 9px;
-        background: rgba(15,15,15,.94); color: #fff; font-size: 12px; font-weight: bold;
-        text-align: center; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 7px rgba(0,0,0,.45);
-    }
+    .developmentBuildingImage { z-index: 3; }
 
     #developmentScene {
         position: absolute;
@@ -247,7 +214,27 @@
         aspect-ratio: 1 / 1;
         height: 100%;
     }
-          position: absolute;
+    .devBuilding {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        box-sizing: border-box;
+        border: 2px solid transparent;
+        border-radius: 18px;
+        background: transparent;
+        color: transparent;
+        cursor: pointer;
+        user-select: none;
+        font-size: 0;
+        z-index: 6;
+        transition: background .15s, border-color .15s, box-shadow .15s;
+    }
+    .devBuilding:hover {
+        background: rgba(255,213,74,.12);
+        border-color: rgba(255,213,74,.75);
+        box-shadow: 0 0 18px rgba(255,213,74,.22);
+    }
+    .devBuilding .devLevel {
+        position: absolute;
         left: 50%;
         bottom: 8%;
         transform: translateX(-50%);
@@ -263,7 +250,12 @@
         pointer-events: none;
         white-space: nowrap;
     }
-      .buildingTimer {
+    .devBuilding[data-building="castle"] { width: 34%; height: 31%; }
+    .devBuilding[data-building="wall"] { width: 76%; height: 13%; }
+    .devBuilding[data-building="barracks1"],
+    .devBuilding[data-building="barracks2"] { width: 27%; height: 24%; }
+    .devBuilding[data-building="goldMine"] { width: 34%; height: 24%; }
+    .buildingTimer {
         display: none;
         position: absolute;
         left: 50%;
@@ -404,7 +396,7 @@
 }
 #playerMapPanel.open{display:flex}
 #playerMapInner{
-  width:min(1100px,96vw); height:min(760px,92vh); overflow:hidden;
+  width:min(1100px,96vw); height:min(760px,92vh); overflow:auto;
   background:linear-gradient(180deg,#18212b,#0e151c); color:#fff; border:1px solid rgba(255,255,255,.16);
   border-radius:18px; box-shadow:0 20px 70px rgba(0,0,0,.55); padding:18px; box-sizing:border-box;
 }
@@ -412,7 +404,7 @@
 .playerMapHeader h2{margin:0}
 .playerMapLegend{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;opacity:.9}
 .playerWorld{
-  position:relative; min-height:540px; margin-top:14px; border-radius:16px; overflow:auto; min-width:0; width:100%;
+  position:relative; min-height:540px; margin-top:14px; border-radius:16px; overflow:hidden;
   background:
     linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px),
     linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
@@ -420,7 +412,6 @@
   background-size:60px 60px,60px 60px,100% 100%; border:1px solid rgba(255,255,255,.12);
 }
 .playerWorld:before{content:"";position:absolute;left:42%;top:-10%;width:15%;height:125%;transform:rotate(7deg);background:rgba(65,145,190,.5);filter:blur(2px);}
-.playerWorldGrid{display:grid;position:relative;grid-auto-flow:row;align-content:start;width:max-content;min-width:max-content;min-height:100%;}
 .playerMarker{position:absolute;transform:translate(-50%,-50%);min-width:112px;padding:8px 10px;border-radius:12px;background:rgba(20,25,30,.9);border:1px solid rgba(255,255,255,.18);text-align:center;cursor:pointer;transition:.15s;z-index:2}
 .playerMarker:hover,.playerMarker.selected{transform:translate(-50%,-50%) scale(1.05);border-color:#ffd166;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .playerMarker .markerIcon{font-size:30px;display:block}
@@ -435,11 +426,8 @@
 .defenseRow input{width:100%;box-sizing:border-box;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:#0f151d;color:#fff}
 .defenseActions{display:flex;gap:8px;margin-top:14px}
 .defenseActions button{flex:1;padding:10px;border-radius:9px;cursor:pointer}
-.developmentDefenseButton{position:absolute;left:34%;top:79%;transform:translate(-50%,-50%);z-index:8;padding:8px 14px;border:1px solid rgba(255,255,255,.55);border-radius:9px;background:rgba(35,59,42,.94);color:#fff;font-size:14px;font-weight:bold;cursor:pointer;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.4)}
+.developmentDefenseButton{position:absolute;left:50%;top:2%;transform:translateX(-50%);z-index:8;padding:8px 14px;border:1px solid rgba(255,255,255,.55);border-radius:9px;background:rgba(35,59,42,.94);color:#fff;font-size:14px;font-weight:bold;cursor:pointer;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.4)}
 .developmentDefenseButton:hover{background:rgba(45,80,55,.98)}
-.fastArrivalTopRow{margin-top:42px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;justify-content:stretch!important}
-.fastArrivalTopButton{width:100%;max-width:none!important;background:rgba(120,85,25,.95)!important;border-color:rgba(255,255,255,.45)!important}
-.fastArrivalTopButton:hover{background:rgba(150,105,30,.98)!important}
 #battleRetreatControls{position:absolute;left:50%;top:16px;transform:translateX(-50%);z-index:20;display:none;gap:10px;direction:rtl}
 #battleRetreatControls.open{display:flex}
 .battleRetreatButton{padding:9px 14px;border:1px solid rgba(255,255,255,.35);border-radius:9px;background:rgba(120,35,35,.94);color:#fff;font-weight:bold;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35)}
@@ -461,7 +449,7 @@
 #attackPanel{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.84);padding:16px;box-sizing:border-box}
 #attackPanel.open{display:flex}
 .attackInner{width:min(620px,96vw);max-height:92vh;overflow:auto;background:#171717;border:2px solid #888;border-radius:16px;padding:18px;box-sizing:border-box;direction:rtl}
-.playerWorld.gridWorld{display:block;gap:0;padding:4px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable;overflow:auto;width:100%;min-width:0;}
+.playerWorld.gridWorld{display:grid;grid-template-columns:repeat(10,60px);grid-auto-rows:72px;gap:2px;padding:4px;overflow:auto;align-content:start;width:max-content;min-width:624px;height:min(520px,calc(100vh - 300px));min-height:360px;max-height:520px;box-sizing:border-box;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable}
 .worldCell{position:relative;min-height:72px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:3px;box-sizing:border-box;cursor:pointer}
 .worldCell img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto}.worldCell .castleFallback{display:block;font-size:34px;line-height:42px;height:42px;text-align:center}
 .worldCell span{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -474,31 +462,36 @@
 .playerWorld.gridWorld::-webkit-scrollbar{width:10px;height:10px}
 .playerWorld.gridWorld::-webkit-scrollbar-track{background:rgba(0,0,0,.28);border-radius:8px}
 .playerWorld.gridWorld::-webkit-scrollbar-thumb{background:rgba(255,255,255,.42);border-radius:8px;border:2px solid rgba(0,0,0,.15)}
-.playerWorld.gridWorld{scrollbar-width:auto;scrollbar-gutter:stable;}
+.playerWorld.gridWorld{scrollbar-width:auto;scrollbar-gutter:stable}
 .worldCell{position:relative;overflow:visible}
 .marchCard{padding:8px 10px;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(15,20,30,.72)}
 .marchCard strong{display:block;margin-bottom:3px}
 .marchTimer{font-size:12px;opacity:.9}
 @media(max-width:700px){.attackGrid{grid-template-columns:1fr}}
 
-
+.fastArrivalTestButton{display:block;margin:8px auto 12px;padding:8px 14px;border:1px solid rgba(255,255,255,.45);border-radius:9px;background:rgba(120,85,25,.95);color:#fff;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.fastArrivalTestButton:hover{background:rgba(150,105,30,.98)}
+.battleArrivalTimer{display:block;width:max-content;max-width:calc(100% - 20px);margin:8px auto 4px;padding:7px 14px;border:1px solid rgba(255,255,255,.35);border-radius:9px;background:rgba(25,25,25,.95);color:#fff;font-size:14px;font-weight:bold;text-align:center;box-sizing:border-box}
 
 /* ===== بهینه‌سازی واقعی موبایل، بدون حذف محتوای بازی ===== */
 .devHeaderRow{display:flex;align-items:center;justify-content:space-between;gap:8px;direction:rtl}
 .devHeaderRow h2{flex:1}
 .logoutGameButton{padding:7px 10px;border:1px solid rgba(255,255,255,.45);border-radius:8px;background:#5b2020;color:#fff;font-size:12px;font-weight:bold;cursor:pointer;white-space:nowrap}
 @media(max-width:700px){
-  #developmentPanel{padding:6px;overflow-x:hidden;overflow-y:auto}
-  #developmentInner{width:100%;min-width:0;max-width:100%;min-height:0;height:auto;min-height:calc(100vh - 12px);padding:8px;border-radius:10px;overflow:visible}
+  #developmentPanel{padding:6px;overflow:hidden}
+  #developmentInner{width:100%;min-width:0;max-width:100%;min-height:0;height:calc(100vh - 12px);padding:8px;border-radius:10px;overflow:hidden}
   #developmentTopbar{gap:4px;padding:5px;margin-bottom:5px;font-size:11px}
-  .developmentTopRow{gap:4px}
   .devStat{padding:4px 6px;border-radius:6px;font-size:10px}
   #developmentField{height:calc(100vh - 245px);min-height:300px;max-height:480px;border-radius:9px}
   #developmentScene{width:100%;height:100%;max-width:none}
-  .developmentDefenseButton{left:34%;top:79%;padding:5px 8px;font-size:10px}
-  .fastArrivalTopRow{margin-top:34px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}.fastArrivalTopButton{width:100%;max-width:none!important;padding:5px 8px;font-size:10px}
-  .developmentLevelOverlay{min-width:24px;padding:2px 5px;font-size:10px}
-  .developmentTimerOverlay{min-width:74px;padding:3px 5px;font-size:9px}
+  .devBuilding{border-width:1px;border-radius:10px}
+  .devBuilding[data-building="barracks1"],.devBuilding[data-building="barracks2"]{width:25%;height:21%}
+  .devBuilding[data-building="castle"]{width:31%;height:28%}
+  .devBuilding[data-building="goldMine"]{width:31%;height:21%}
+  .devBuilding[data-building="wall"]{width:72%;height:12%}
+  .devBuilding .devLevel{min-width:48px;padding:2px 4px;font-size:9px;bottom:2%}
+  .buildingTimer{min-width:74px;padding:3px 5px;font-size:9px;bottom:-25px}
+  .developmentDefenseButton{top:1%;padding:5px 8px;font-size:10px}
   #devMessage{min-height:20px;margin:4px 0;font-size:11px}
   #devCloseButton{margin-top:3px;padding:6px 12px;font-size:11px}
   .devHeaderRow h2{font-size:15px}
@@ -521,7 +514,7 @@
   .playerMapHeader{gap:5px}
   .playerMapHeader h2{font-size:15px}
   .playerMapLegend{font-size:9px;gap:5px}
-  .playerWorld.gridWorld{display:block;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:0;width:100%;gap:1px;padding:4px;overflow:scroll;overflow-x:scroll;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
+  .playerWorld.gridWorld{display:grid;box-sizing:border-box;min-height:0;height:calc(100vh - 190px);min-width:624px;width:max-content;grid-template-columns:repeat(10,60px);grid-auto-rows:54px;gap:1px;padding:4px;overflow:scroll;overflow-x:scroll;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;justify-content:start;touch-action:pan-x pan-y;overscroll-behavior:contain}
   .worldCell{min-height:54px;padding:2px}
   .worldCell img{width:28px;height:28px}.worldCell .castleFallback{font-size:24px;line-height:28px;height:28px}
   .worldCell span{font-size:8px}
@@ -833,7 +826,8 @@
             <div id="selectedPlayerDistance"></div>
           </div>
           <div class="mapActionRow">
-            <button type="button" id="attackSelectedPlayerButton">⚔️ آماده‌سازی حمله</button>
+            <button type="button" id="attackSelectedPlayerButton">⚔️ حمله</button>
+            <button type="button" id="defendSelectedPlayerButton">🛡️ دفاع</button>
             <button type="button" id="closeSelectedPlayerButton">لغو انتخاب</button>
           </div>
         </div>
@@ -861,44 +855,33 @@
         <div id="developmentInner">
             <div class="devHeaderRow"><h2 style="margin:4px 0 10px;">🏰 توسعه قلعه</h2><button type="button" id="logoutGameButton" class="logoutGameButton">🚪 خروج از بازی</button></div>
             <div id="developmentTopbar">
-                <div class="developmentTopRow">
-                    <button type="button" class="devStat" id="devProductionStat">📈 تولید طلا: 100/دقیقه</button>
-                    <button type="button" class="devStat" id="devGoldStat">🪙 طلا: 3000</button>
-                    <button type="button" class="devStat" id="profileButton">👤 پروفایل</button>
-                </div>
-                <div class="developmentTopRow">
-                    <button type="button" class="devStat" id="devArcherStat">🏹 کماندار: 0</button>
-                    <button type="button" class="devStat" id="devCavalryStat">🐎 سواره: 0</button>
-                    <button type="button" class="devStat" id="devSwordsmanStat">⚔️ شمشیرزن: 0</button>
-                </div>
-                <div class="developmentTopRow twoButtons">
-                    <button type="button" id="enterBattleFromDevelopmentButton" class="devStat">⚔️ ورود به صحنه نبرد</button>
-                    <button type="button" id="developmentPlayerMapButton" class="devStat">🌍 نقشه بازیکنان</button>
-                </div>
-                <div class="developmentTopRow fastArrivalTopRow">
-                    <button type="button" id="fastArrivalTestButton" class="devStat fastArrivalTopButton">⚡ رسیدن سریع نیرو (تست)</button>
-                </div>
+                <button type="button" id="developmentPlayerMapButton" class="devStat" style="cursor:pointer;">🌍 نقشه بازیکنان</button>
+                <button type="button" id="enterBattleFromDevelopmentButton" class="devStat" style="cursor:pointer;">⚔️ ورود به صحنه نبرد</button>
+                <div class="devStat" id="devGoldStat">🪙 طلا: 3000</div>
+                <div class="devStat" id="devProductionStat">📈 تولید: 100 طلا/دقیقه</div>
+                <div class="devStat" id="devArcherStat">🏹 کماندار: 0</div>
+                <div class="devStat" id="devCavalryStat">🐎 سواره: 0</div>
+                <div class="devStat" id="devSwordsmanStat">⚔️ شمشیرزن: 0</div>
             </div>
             <div id="armyMarches"></div>
+            <div id="battleArrivalTimer" class="battleArrivalTimer" aria-live="polite">⏱ زمان تا مدیریت نبرد: --:--</div>
+            <button type="button" id="fastArrivalTestButton" class="fastArrivalTestButton">⚡ رسیدن سریع نیرو (تست)</button>
             <div id="developmentField">
                 <div id="developmentScene">
                     <img id="developmentBackground" class="developmentLayer" src="images/development/development-background.jpg" alt="زمینه قلعه" loading="eager" draggable="false">
-                    <img id="developmentWall" class="developmentLayer developmentBuildingImage" data-building="wall" src="images/development/development-wall.png" alt="دیوار قلعه" loading="eager" draggable="false">
-                    <img id="developmentCastle" class="developmentLayer developmentBuildingImage" data-building="castle" src="images/development/development-castle.png" alt="قلعه" loading="eager" draggable="false">
-                    <img id="developmentBarracks1" class="developmentLayer developmentBuildingImage" data-building="barracks1" src="images/development/development-barracks1.png" alt="سربازخانه ۱" loading="eager" draggable="false">
-                    <img id="developmentBarracks2" class="developmentLayer developmentBuildingImage" data-building="barracks2" src="images/development/development-barracks2.png" alt="سربازخانه ۲" loading="eager" draggable="false">
-                    <img id="developmentGoldMine" class="developmentLayer developmentBuildingImage" data-building="goldMine" src="images/development/development-goldMine.png" alt="معدن طلا" loading="eager" draggable="false">
-                    <span class="developmentLevelOverlay" id="level-castle" style="left:50%;top:32%;">1</span>
-                    <span class="developmentLevelOverlay" id="level-wall" style="left:50%;top:11.5%;">1</span>
-                    <span class="developmentLevelOverlay" id="level-barracks1" style="left:22%;top:52%;">1</span>
-                    <span class="developmentLevelOverlay" id="level-barracks2" style="left:78%;top:52%;">1</span>
-                    <span class="developmentLevelOverlay" id="level-goldMine" style="left:50%;top:67%;">1</span>
-                    <span class="developmentTimerOverlay" id="buildingTimer-castle" style="left:50%;top:47%;"></span>
-                    <span class="developmentTimerOverlay" id="buildingTimer-wall" style="left:50%;top:16%;"></span>
-                    <span class="developmentTimerOverlay" id="buildingTimer-barracks1" style="left:22%;top:66%;"></span>
-                    <span class="developmentTimerOverlay" id="buildingTimer-barracks2" style="left:78%;top:66%;"></span>
-                    <span class="developmentTimerOverlay" id="buildingTimer-goldMine" style="left:50%;top:81%;"></span>
+                    <img id="developmentWall" class="developmentLayer" src="images/development/development-wall.png" alt="دیوار قلعه" loading="eager" draggable="false">
+                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-castle.png" alt="قلعه" loading="eager" draggable="false">
+                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-barracks1.png" alt="سربازخانه ۱" loading="eager" draggable="false">
+                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-barracks2.png" alt="سربازخانه ۲" loading="eager" draggable="false">
+                    <img class="developmentLayer developmentBuildingImage" src="images/development/development-goldMine.png" alt="معدن طلا" loading="eager" draggable="false">
+
+                    <!-- لایه‌های نامرئی کلیک، همان منطق قبلی را اجرا می‌کنند. -->
+                    <div class="devBuilding" data-building="castle" style="left:50%;top:32%;" role="button" aria-label="قلعه"><span class="devLevel" id="level-castle">سطح 1</span><span class="buildingTimer" id="buildingTimer-castle"></span></div>
+                    <div class="devBuilding" data-building="wall" style="left:50%;top:9%;" role="button" aria-label="دیوار"><span class="devLevel" id="level-wall">سطح 1</span><span class="buildingTimer" id="buildingTimer-wall"></span></div>
                     <button type="button" id="developmentDefenseButton" class="developmentDefenseButton">🛡️ چینش دفاع</button>
+                    <div class="devBuilding" data-building="barracks1" style="left:22%;top:52%;" role="button" aria-label="سربازخانه ۱"><span class="devLevel" id="level-barracks1">سطح 1</span><span class="buildingTimer" id="buildingTimer-barracks1"></span></div>
+                    <div class="devBuilding" data-building="barracks2" style="left:78%;top:52%;" role="button" aria-label="سربازخانه ۲"><span class="devLevel" id="level-barracks2">سطح 1</span><span class="buildingTimer" id="buildingTimer-barracks2"></span></div>
+                    <div class="devBuilding" data-building="goldMine" style="left:50%;top:67%;" role="button" aria-label="معدن طلا"><span class="devLevel" id="level-goldMine">سطح 1</span><span class="buildingTimer" id="buildingTimer-goldMine"></span></div>
                 </div>
             </div>
             <div id="devMessage"></div>
@@ -3013,7 +2996,7 @@ function updateDevelopmentUI() {
 
     Object.keys(s.buildings).forEach(key => {
         const el = document.getElementById(`level-${key}`);
-        if (el) el.textContent = String(s.buildings[key].level);
+        if (el) el.textContent = `سطح ${s.buildings[key].level}`;
     });
 
     const upgradeTimer = document.getElementById("upgradeTimer");
@@ -3292,28 +3275,36 @@ setInterval(function() {
     });
 
     // حرکت ارتش‌های اعزامی حتی وقتی پنل توسعه باز است ادامه دارد.
-    const arrived = [];
+    let battleManagementTriggered = false;
     const returned = [];
     developmentState.activeAttacks.forEach(function(attack){
         attack.remaining = Math.max(0, Number(attack.remaining) - dt);
-        if (attack.remaining <= 0) {
-            if (attack.returning) returned.push(attack);
-            else arrived.push(attack);
+        if (attack.remaining <= 0 && !attack.returning && !attack._battleManagementTriggered) {
+            attack._battleManagementTriggered = true;
+            مدیریت_نبرد(attack);
+            battleManagementTriggered = true;
+        } else if (attack.remaining <= 0 && attack.returning) {
+            returned.push(attack);
         }
     });
+
+    // اگر تایمر نبرد صفر شد، فقط «مدیریت نبرد» اجرا می‌شود و این تیک هیچ کار دیگری انجام نمی‌دهد.
+    if (battleManagementTriggered) {
+        renderBattleArrivalTimer();
+        return;
+    }
+
     developmentState.activeAttacks = developmentState.activeAttacks.filter(a => a.remaining > 0);
     returned.forEach(function(attack){
         for (const type of ["archer","cavalry","swordsman"]) {
             developmentState.army[type] = (Number(developmentState.army[type]) || 0) + Math.max(0,Math.floor(Number(attack.composition?.[type])||0));
         }
     });
-    // نبرد از طرف سرور و بر اساس نقش حساب آغاز می‌شود؛ اینجا فقط رسیدن محلی را ثبت می‌کنیم.
-    // مدافع از /api/attacks/incoming و مهاجم از /api/attacks/outgoing وضعیت را می‌گیرد.
-    arrived.forEach(function(attack){ attack.status = "arrived"; });
 
     capGold();
     updateDevelopmentUI();
     renderArmyMarches();
+    renderBattleArrivalTimer();
     if (Date.now() - lastDevelopmentSave >= 1000) saveDevelopmentState();
 }, 1000);
 
@@ -3334,67 +3325,11 @@ document.getElementById("devCloseButton").addEventListener("click", function() {
     document.getElementById("developmentPanel").classList.remove("open");
 });
 
-// تشخیص کلیک بر اساس پیکسل‌های واقعی و غیرشفاف هر ساختمان؛
-// بنابراین قسمت‌های شفاف PNG باعث انتخاب ساختمان اشتباه نمی‌شوند.
-const developmentHitCanvases = new WeakMap();
-
-function getDevelopmentHitCanvas(img) {
-    let canvas = developmentHitCanvases.get(img);
-    if (canvas || !img.naturalWidth || !img.naturalHeight) return canvas || null;
-    canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0);
-    developmentHitCanvases.set(img, canvas);
-    return canvas;
-}
-
-function isDevelopmentPixelOpaque(img, clientX, clientY) {
-    const rect = img.getBoundingClientRect();
-    if (!rect.width || !rect.height) return false;
-
-    const nw = img.naturalWidth;
-    const nh = img.naturalHeight;
-    if (!nw || !nh) return false;
-
-    // همان object-fit: contain که روی تصویر اعمال شده است.
-    const scale = Math.min(rect.width / nw, rect.height / nh);
-    const renderedW = nw * scale;
-    const renderedH = nh * scale;
-    const offsetX = (rect.width - renderedW) / 2;
-    const offsetY = (rect.height - renderedH) / 2;
-    const x = clientX - rect.left - offsetX;
-    const y = clientY - rect.top - offsetY;
-
-    if (x < 0 || y < 0 || x >= renderedW || y >= renderedH) return false;
-
-    const px = Math.min(nw - 1, Math.max(0, Math.floor(x / scale)));
-    const py = Math.min(nh - 1, Math.max(0, Math.floor(y / scale)));
-    const canvas = getDevelopmentHitCanvas(img);
-    if (!canvas) return false;
-
-    const alpha = canvas.getContext("2d", { willReadFrequently: true })
-        .getImageData(px, py, 1, 1).data[3];
-    return alpha > 20;
-}
-
-const developmentBuildingImages = Array.from(document.querySelectorAll(".developmentBuildingImage"));
-const developmentScene = document.getElementById("developmentScene");
-if (developmentScene) {
-    developmentScene.addEventListener("click", function(event) {
-        // از بالاترین لایه به پایین‌ترین لایه بررسی می‌کنیم.
-        for (let i = developmentBuildingImages.length - 1; i >= 0; i--) {
-            const img = developmentBuildingImages[i];
-            if (isDevelopmentPixelOpaque(img, event.clientX, event.clientY)) {
-                openBuildingActions(img.dataset.building);
-                event.preventDefault();
-                event.stopPropagation();
-                return;
-            }
-        }
+document.querySelectorAll(".devBuilding").forEach(function(el) {
+    el.addEventListener("click", function() {
+        openBuildingActions(this.dataset.building);
     });
-}
+});
 
 document.getElementById("upgradeBuildingButton").addEventListener("click", function() {
     if (selectedDevelopmentBuilding && startBuildingUpgrade(selectedDevelopmentBuilding)) {
@@ -3525,32 +3460,33 @@ async function loadOnlineWorldPlayers(){
   try {
     const data = await onlineRequest("/players", { method: "GET" });
     const serverPlayers = Array.isArray(data.players) ? data.players : [];
-    const layout = Array.isArray(data.cellLayout) ? data.cellLayout : [];
     const selfId = String(data.selfId ?? "");
-    const layoutById = new Map(layout.map(p => [String(p.id), p]));
 
-    // مختصات نقشه فقط از سرور/SQL می‌آید. هیچ موقعیت تصادفی یا جابه‌جایی
-    // برای بازیکنان واقعی انجام نمی‌دهیم.
-    worldPlayers = serverPlayers.map((p, index) => {
-      const lp = layoutById.get(String(p.id));
-      const cell = Number.isFinite(Number(p.cell)) ? Math.max(0, Number(p.cell)) : null;
-      return {
-        id: String(p.id),
-        name: String(p.username || "بازیکن"),
-        level: Math.max(1, Number(p.castleLevel) || 1),
-        status: p.online ? "آنلاین" : "آفلاین",
-        online: Boolean(p.online),
-        self: String(p.id) === selfId,
-        cell,
-        gridX: Number.isFinite(Number(lp?.x)) ? Number(lp.x) : (cell !== null ? cell % 10 : null),
-        gridY: Number.isFinite(Number(lp?.y)) ? Number(lp.y) : (cell !== null ? Math.floor(cell / 10) : null)
-      };
-    });
+    // Use the server's real player list; do not generate fake opponents when it succeeds.
+    worldPlayers = serverPlayers.map((p, index) => ({
+      id: String(p.id),
+      name: String(p.username || "بازیکن"),
+      level: Math.max(1, Number(p.castleLevel) || 1),
+      status: p.online ? "آنلاین" : "آفلاین",
+      online: Boolean(p.online),
+      self: String(p.id) === selfId,
+      cell: Number.isFinite(Number(p.cell)) ? Math.max(0, Number(p.cell)) : index
+    }));
 
-    worldPlayers = worldPlayers.filter(p => Number.isFinite(p.gridX) && Number.isFinite(p.gridY));
+    // Avoid overlapping castles if older server records have duplicate/missing cells.
+    const used = new Set();
+    let nextCell = 0;
+    for (const player of worldPlayers) {
+      if (used.has(player.cell)) {
+        while (used.has(nextCell)) nextCell++;
+        player.cell = nextCell;
+      }
+      used.add(player.cell);
+    }
     renderPlayerWorld();
   } catch (error) {
     console.error("بارگذاری بازیکنان نقشه ناموفق بود:", error);
+    // Keep already-loaded real players visible; never replace them with fake players on API failure.
     renderPlayerWorld();
   }
 }
@@ -3564,106 +3500,78 @@ function buildWorldPlayers(){
   const realCount = Math.max(1, getRegisteredUserCount());
   const names = ["فرمانده شمال","شاهین سرخ","اتحاد شرق","قلعه سنگی","فرمانده غرب","سپاه جنوب","دژ آذر","شاهزادگان شرق","اتحاد سبز","نگهبانان مرز"];
   worldPlayers = [];
+
+  // برای تست، وقتی فقط یک حساب وجود دارد یک حریف آزمایشی هم داریم.
+  // در حالت چندحسابی، فقط حساب‌های واقعی بازیکنان نمایش داده می‌شوند.
   const count = realCount === 1 ? 2 : realCount;
   for(let i=0;i<count;i++){
     const id = i+1;
     const isSelf = i===0;
     const name = isSelf ? (currentUsername || "شما") : (realCount === 1 ? "بازیکن آزمایشی" : (names[(i-1)%names.length] + (i>names.length ? " "+id : "")));
+    // جای‌گذاری تصادفی قلعه‌ها با فاصله از هم
     let cell;
-    do { cell = Math.floor(Math.random() * getWorldSize()); }
-    while (worldPlayers.some(p => Math.abs(p.cell - cell) < 5));
-    worldPlayers.push({id,name,level:1,status:isSelf?"آنلاین":"آفلاین",self:isSelf,cell,gridX:cell%10,gridY:Math.floor(cell/10)});
+    do {
+      cell = Math.floor(Math.random() * getWorldSize());
+    } while (worldPlayers.some(p => Math.abs(p.cell - cell) < 5));
+    worldPlayers.push({id,name,level:1,status:isSelf?"آنلاین":"آفلاین",self:isSelf,cell});
   }
-}
-
-function getWorldBounds(){
-  // نقشه یک فضای واقعی و بزرگ دارد؛ مختصات بازیکنان از SQL/سرور
-  // مستقیماً داخل همین فضای ثابت قرار می‌گیرند.
-  const BASE_WORLD_COLUMNS = 40;
-  const BASE_WORLD_ROWS = 40;
-  if (!Array.isArray(worldPlayers) || !worldPlayers.length) {
-    return {minX:0,maxX:BASE_WORLD_COLUMNS-1,minY:0,maxY:BASE_WORLD_ROWS-1};
-  }
-  const xs=worldPlayers.map(p=>Number(p.gridX)).filter(Number.isFinite);
-  const ys=worldPlayers.map(p=>Number(p.gridY)).filter(Number.isFinite);
-  if(!xs.length || !ys.length) return {minX:0,maxX:BASE_WORLD_COLUMNS-1,minY:0,maxY:BASE_WORLD_ROWS-1};
-  const minX=0, maxX=Math.max(BASE_WORLD_COLUMNS-1, ...xs);
-  const minY=0, maxY=Math.max(BASE_WORLD_ROWS-1, ...ys);
-  return {minX,maxX,minY,maxY};
 }
 
 function getWorldSize(){
-  const b=getWorldBounds();
-  return Math.max(400,(b.maxX-b.minX+1)*(b.maxY-b.minY+1));
+  // نقشه همیشه به اندازه‌ای بزرگ باشد که روی موبایل واقعاً قابل اسکرول باشد.
+  // 10 ستون داریم و حداقل 400 خانه یعنی 40 ردیف.
+  return Math.max(400, 100 + Math.max(0, worldPlayers.length - 1) * 10);
 }
 
 function renderPlayerWorld(){
   const world=document.getElementById("playerWorld"); if(!world) return;
-  if ((!Array.isArray(worldPlayers) || worldPlayers.length === 0) && !onlineToken) buildWorldPlayers();
-
-  world.classList.add("gridWorld");
-  world.innerHTML="<div id=\"playerWorldGrid\" class=\"playerWorldGrid\"></div>";
-  const grid=document.getElementById("playerWorldGrid");
-
-  const bounds=getWorldBounds();
-  const cols=bounds.maxX-bounds.minX+1;
-  const rows=bounds.maxY-bounds.minY+1;
-  grid.style.gridTemplateColumns=`repeat(${cols},60px)`;
-  grid.style.gridTemplateRows=`repeat(${rows},72px)`;
-  grid.style.width=`${Math.max(60, cols*60)}px`;
-  grid.style.height=`${Math.max(72, rows*72)}px`;
-
-  const castlesByCoord=new Map(worldPlayers.map(p=>[`${p.gridX},${p.gridY}`,p]));
-  for(let y=bounds.minY;y<=bounds.maxY;y++){
-    for(let x=bounds.minX;x<=bounds.maxX;x++){
-      const owner=castlesByCoord.get(`${x},${y}`) || null;
-      const el=document.createElement("button");
-      el.type="button";
-      el.className="worldCell"+(owner&&owner.self?" self":"")+(owner&&selectedWorldPlayer===owner.id?" selected":"");
-      if(owner){
-        el.innerHTML=`<img src="images/castle.png" alt="قلعه" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class="castleFallback">🏰</span>')"><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
-        el.addEventListener("click",(e)=>{
-          e.preventDefault(); e.stopPropagation(); selectWorldPlayer(owner.id);
-          if(!owner.self) selectedWorldPlayer=owner.id;
-        });
-        if(!owner.self && selectedWorldPlayer===owner.id){
-          const attack=document.createElement("button");
-          attack.type="button"; attack.className="cellAttackBtn"; attack.textContent="⚔️ حمله";
-          attack.addEventListener("click",(e)=>{e.preventDefault();e.stopPropagation();selectedWorldPlayer=owner.id;openAttackPanel();});
-          el.appendChild(attack);
-        }
-      } else {
-        el.innerHTML=`<span style="display:block;margin-top:20px;opacity:.35;">زمین خالی</span>`;
-      }
-      grid.appendChild(el);
-    }
+  if ((!Array.isArray(worldPlayers) || worldPlayers.length === 0) && !onlineToken) {
+    buildWorldPlayers();
   }
-
-  // هنگام ورود به نقشه، قلعه بازیکن خودمان در مرکز دید قرار بگیرد.
-  const me=worldPlayers.find(p=>p.self);
-  if(me){
-    const selfEl=Array.from(grid.children).find(el=>el.classList.contains("self"));
-    if(selfEl){
-      requestAnimationFrame(()=>{
-        const left=selfEl.offsetLeft - Math.max(0,(world.clientWidth-selfEl.offsetWidth)/2);
-        const top=selfEl.offsetTop - Math.max(0,(world.clientHeight-selfEl.offsetHeight)/2);
-        world.scrollLeft=Math.max(0,left);
-        world.scrollTop=Math.max(0,top);
+  world.classList.add("gridWorld"); world.innerHTML="";
+  const totalCells=getWorldSize();
+  const castlesByCell=new Map(worldPlayers.map(p=>[p.cell,p]));
+  for(let cell=0;cell<totalCells;cell++){
+    const owner=castlesByCell.get(cell) || null;
+    const el=document.createElement("button");
+    el.type="button";
+    el.className="worldCell"+(owner&&owner.self?" self":"")+(owner&&selectedWorldPlayer===owner.id?" selected":"");
+    if(owner){
+      el.innerHTML=`<img src="images/castle.png" alt="قلعه" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class="castleFallback">🏰</span>')"><span>${owner.name}</span><small>قلعه سطح ${owner.level}</small>${owner.self ? `<small>شما</small>` : `<small class="worldPlayerStatus ${owner.online ? "online" : "offline"}">${owner.status || "آفلاین"}</small>`}`;
+      el.addEventListener("click",(e)=>{
+        e.preventDefault(); e.stopPropagation();
+        selectWorldPlayer(owner.id);
+        if(!owner.self){
+          selectedWorldPlayer=owner.id;
+        }
       });
+      if(!owner.self && selectedWorldPlayer===owner.id){
+        const attack=document.createElement("button");
+        attack.type="button";
+        attack.className="cellAttackBtn";
+        attack.textContent="⚔️ حمله";
+        attack.addEventListener("click",(e)=>{
+          e.preventDefault(); e.stopPropagation();
+          selectedWorldPlayer=owner.id;
+          openAttackPanel();
+        });
+        el.appendChild(attack);
+
+      }
+    } else {
+      el.innerHTML=`<span style="display:block;margin-top:20px;opacity:.35;">زمین خالی</span>`;
     }
+    world.appendChild(el);
   }
 }
-
 
 function selectWorldPlayer(id){
   selectedWorldPlayer=id;
   const player=worldPlayers.find(p=>p.id===id);
   const card=document.getElementById("selectedPlayerCard");
   if(!player || player.self){ card.classList.remove("open"); renderPlayerWorld(); return; }
-  const me=worldPlayers.find(p=>p.self);
-  const dx=Number(player.gridX)-Number(me?.gridX||0);
-  const dy=Number(player.gridY)-Number(me?.gridY||0);
-  const distance=Math.max(1, Math.sqrt(dx*dx+dy*dy));
+  const myIndex=worldPlayers.findIndex(p=>p.self);
+  const distance=Math.max(1, Math.abs(player.cell-myIndex*10)/10);
   player.distance=`${distance} خانه`;
   document.getElementById("selectedPlayerName").textContent=`🏰 ${player.name}`;
   document.getElementById("selectedPlayerLevel").textContent=`🏰 سطح قلعه: ${player.level}`;
@@ -3808,6 +3716,80 @@ function updateAttackSummary(){
   return {totals,total};
 }
 
+function createUniqueBattleNumber(){
+  const stamp=Date.now().toString(36).toUpperCase();
+  const random=(window.crypto && typeof window.crypto.randomUUID === "function")
+    ? window.crypto.randomUUID().replace(/-/g,"").slice(0,8).toUpperCase()
+    : Math.random().toString(36).slice(2,10).toUpperCase();
+  return `B-${stamp}-${random}`;
+}
+
+function getBattleFormationPosition(side,index){
+  const slot=Math.max(0,Number(index)||0);
+  const column=slot%6;
+  const row=Math.floor(slot/6);
+  return {
+    x:250 + column*100,
+    y:side === "مهاجم" ? 350 + row*90 : 1550 - row*90
+  };
+}
+
+/*
+ * مدیریت نبرد:
+ * با صفر شدن تایمر حمله، فقط همین تابع فراخوانی می‌شود.
+ * هیچ startBattle / status=arrived / polling / نتیجه‌گیری دیگری در این لحظه انجام نمی‌شود.
+ */
+function مدیریت_نبرد(attack){
+  if(!attack) return null;
+
+  const battleNumber=createUniqueBattleNumber();
+  const targetSlots=Array.isArray(attack.defenderSetup?.slots) ? attack.defenderSetup.slots.slice(0,6) : [];
+  const attackerSlots=Array.isArray(attack.slots) ? attack.slots.slice(0,6) : [];
+  const نیروها=[];
+  const validTypes=new Set(["archer","cavalry","swordsman"]);
+
+  targetSlots.forEach((slot,index)=>{
+    const type=validTypes.has(slot?.type) ? slot.type : "archer";
+    const count=Math.max(0,Math.floor(Number(slot?.count)||0));
+    if(count<=0) return;
+    const pos=getBattleFormationPosition("مدافع",index);
+    نیروها.push([type,count,attack.targetName || "قلعه مدافع","مدافع",pos.x,pos.y]);
+  });
+
+  attackerSlots.forEach((slot,index)=>{
+    const type=validTypes.has(slot?.type) ? slot.type : "archer";
+    const count=Math.max(0,Math.floor(Number(slot?.count)||0));
+    if(count<=0) return;
+    const pos=getBattleFormationPosition("مهاجم",index);
+    نیروها.push([type,count,attack.attackerName || "قلعه مهاجم","مهاجم",pos.x,pos.y]);
+  });
+
+  const مدیریت={
+    شماره_نبرد:battleNumber,
+    آرایه_نیروها:نیروها,
+    createdAt:Date.now(),
+    sourceAttackId:attack.id ?? null
+  };
+
+  window.currentBattleManagement=مدیریت;
+  window.currentBattleNumber=battleNumber;
+  window.currentBattleForManagement=attack;
+  setDevMessage(`⚔️ مدیریت نبرد ${battleNumber} ایجاد شد.`);
+  return مدیریت;
+}
+
+function renderBattleArrivalTimer(){
+  const el=document.getElementById("battleArrivalTimer");
+  if(!el) return;
+  const attacks=Array.isArray(developmentState.activeAttacks) ? developmentState.activeAttacks : [];
+  const attack=attacks.filter(a=>!a.returning && Number(a.remaining)>0).sort((a,b)=>Number(a.remaining)-Number(b.remaining))[0];
+  if(!attack){
+    el.textContent="⏱ زمان تا مدیریت نبرد: --:--";
+    return;
+  }
+  el.textContent=`⏱ زمان تا مدیریت نبرد: ${formatDuration(Math.max(0,Number(attack.remaining)||0))}`;
+}
+
 async function launchAttack(){
   const panel=document.getElementById("attackPanel");
   const targetId=String(panel.dataset.targetId || "");
@@ -3844,6 +3826,7 @@ async function launchAttack(){
     document.getElementById("developmentPanel").classList.add("open");
     setDevMessage(`⚔️ ارتش به سمت ${target.name} اعزام شد. زمان رسیدن: ${formatDuration(travelSeconds)}`);
     renderArmyMarches();
+    renderBattleArrivalTimer();
   }catch(e){ alert(e.message || "اعزام حمله انجام نشد."); }
 }
 
@@ -3858,6 +3841,7 @@ function fastArrivalForTesting(){
   });
   saveDevelopmentState();
   renderArmyMarches();
+  renderBattleArrivalTimer();
   setDevMessage("⚡ حالت تست فعال شد؛ ارتش‌ها حدود ۳ ثانیه دیگر به مقصد می‌رسند.");
 }
 
@@ -3951,6 +3935,13 @@ document.getElementById("enterBattleFromDevelopmentButton")?.addEventListener("c
 document.getElementById("closePlayerMapButton").addEventListener("click",closeMapAndReturn);
 document.getElementById("closeSelectedPlayerButton").addEventListener("click",function(){selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
 document.getElementById("attackSelectedPlayerButton").onclick = function(e){ e.preventDefault(); e.stopImmediatePropagation(); openAttackPanel(); };
+document.getElementById("defendSelectedPlayerButton").onclick = function(e){
+  e.preventDefault(); e.stopImmediatePropagation();
+  const player=worldPlayers.find(p=>String(p.id)===String(selectedWorldPlayer));
+  if(!player) return;
+  document.getElementById("attackPanel").dataset.mode="defense";
+  setDevMessage(`🛡️ حالت دفاع برای ${player.name} انتخاب شد. (فعلاً فقط گزینه بصری)`);
+};
 document.addEventListener("click", function(e){ const btn=e.target.closest && e.target.closest("#attackSelectedPlayerButton"); if(btn){ e.preventDefault(); e.stopPropagation(); openAttackPanel(); } });
 document.getElementById("closeAttackButton").addEventListener("click",function(){document.getElementById("attackPanel").classList.remove("open");});
 function logoutGame(){
@@ -4002,7 +3993,7 @@ async function pollIncomingAttacks(){
       if(!box){ box=document.createElement('div'); box.id='incomingAttackNotice'; box.style.cssText='position:fixed;top:15px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(120,0,0,.96);border:2px solid #ffd54a;border-radius:12px;padding:12px 16px;color:#fff;font-weight:700;max-width:90vw;'; document.body.appendChild(box); }
       const a=active[0]; const remain=Math.max(0,Math.ceil((Number(a.arrivalAt)||Date.now()-Date.now())/1000));
       box.innerHTML=`⚠️ حمله به قلعه شما<br><span style="font-size:13px">مهاجم: ${a.attackerName||'ناشناس'} | ${a.status==='arrived'?'نیروها رسیده‌اند':'زمان رسیدن: '+formatDuration(Math.max(0,Math.ceil((Number(a.arrivalAt)-Date.now())/1000)))}</span>`;
-      if(a.status==='arrived'){ const btn=document.createElement('button'); btn.textContent='🛡️ ورود به نبرد'; btn.style.cssText='margin-top:8px;padding:7px 12px;border-radius:8px;cursor:pointer;'; btn.onclick=()=>{box.remove(); startBattle(a);}; box.appendChild(document.createElement('br')); box.appendChild(btn); }
+      if(a.status==='arrived'){ box.innerHTML += '<br><span style="font-size:13px">⏳ منتظر صفر شدن تایمر نبرد...</span>'; }
     }
   }catch(e){}
 }
@@ -4011,12 +4002,7 @@ async function pollOutgoingAttacks(){
   try{
     const data=await onlineRequest('/attacks/outgoing');
     const attacks=Array.isArray(data.attacks)?data.attacks:[];
-    const arrived=attacks.find(a=>a.status==='arrived' && !a.battleEndedAt);
-    if(arrived){
-      // فقط مهاجمِ صاحب همین حساب نبرد را باز می‌کند.
-      const selfId=worldPlayers.find(p=>p.self)?.id;
-      if(String(arrived.attackerId)===String(selfId)) startBattle(arrived);
-    }
+    // pollOutgoingAttacks فقط وضعیت سرور را می‌خواند؛ شروع مدیریت نبرد منحصراً با صفر شدن تایمر محلی انجام می‌شود.
   }catch(e){}
 }
 setInterval(pollIncomingAttacks,3000);
@@ -4025,6 +4011,7 @@ pollIncomingAttacks();
 pollOutgoingAttacks();
 
 renderPlayerWorld();
+renderBattleArrivalTimer();
 </script>
 
 </body>
