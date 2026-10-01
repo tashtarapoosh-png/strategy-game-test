@@ -237,6 +237,14 @@
         text-align: center; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 7px rgba(0,0,0,.45);
     }
 
+    #attackTravelTimer {
+        position: absolute; z-index: 12; left: 50%; top: 4%; transform: translateX(-50%);
+        display: none; min-width: 150px; padding: 8px 12px; border: 2px solid #ffd54a;
+        border-radius: 9px; background: rgba(15,15,15,.94); color: #fff; font-size: 14px;
+        font-weight: bold; text-align: center; white-space: nowrap; pointer-events: none;
+        box-shadow: 0 2px 7px rgba(0,0,0,.45);
+    }
+
     #developmentScene {
         position: absolute;
         top: 0;
@@ -898,6 +906,7 @@
                     <span class="developmentTimerOverlay" id="buildingTimer-barracks1" style="left:22%;top:66%;"></span>
                     <span class="developmentTimerOverlay" id="buildingTimer-barracks2" style="left:78%;top:66%;"></span>
                     <span class="developmentTimerOverlay" id="buildingTimer-goldMine" style="left:50%;top:81%;"></span>
+                    <span id="attackTravelTimer">⏱ زمان رسیدن: 00:00</span>
                     <button type="button" id="developmentDefenseButton" class="developmentDefenseButton">🛡️ چینش دفاع</button>
                 </div>
             </div>
@@ -2007,7 +2016,7 @@ canvas.addEventListener(
         if (selectedPiece) {
 
             // فقط صاحب مهره و فقط وقتی متصل است می‌تواند حرکت بدهد.
-            if (selectedPiece.player !== currentBattleRole || !playerConnected[currentBattleRole]) {
+            if (selectedPiece.player !== localPlayer || !playerConnected[localPlayer]) {
                 selectedPiece = null;
                 draw();
                 return;
@@ -2066,7 +2075,7 @@ canvas.addEventListener(
         if (clickedPiece) {
 
             // کنترل مهره دشمن ممنوع است.
-            if (clickedPiece.player === currentBattleRole && playerConnected[currentBattleRole]) {
+            if (clickedPiece.player === localPlayer && playerConnected[localPlayer]) {
                 selectedPiece = clickedPiece;
             } else {
                 selectedPiece = null;
@@ -2094,8 +2103,7 @@ function executeMoves() {
 
     for (const piece of pieces) {
         // هیچ حرکت خودکاری وجود ندارد؛ فقط دستور move که بازیکن ثبت کرده اجرا می‌شود.
-        // کنترل نهایی مالکیت هنگام اجرا: بازیکن فقط می‌تواند نیروهای طرف خودش را حرکت دهد.
-        if (piece.player !== currentBattleRole || !playerConnected[currentBattleRole] || !playerConnected[piece.player] || piece.health <= 0 || piece.command !== "move" || !piece.target) continue;
+        if (piece.player !== localPlayer || !playerConnected[localPlayer] || piece.health <= 0 || piece.command !== "move" || !piece.target) continue;
         if (piece._plannedMoveRound !== round && !piece._moveFrom) continue;
         moving = true;
 
@@ -3845,6 +3853,7 @@ async function launchAttack(){
     document.getElementById("developmentPanel").classList.add("open");
     setDevMessage(`⚔️ ارتش به سمت ${target.name} اعزام شد. زمان رسیدن: ${formatDuration(travelSeconds)}`);
     renderArmyMarches();
+    updateAttackTravelTimer();
   }catch(e){ alert(e.message || "اعزام حمله انجام نشد."); }
 }
 
@@ -3862,11 +3871,29 @@ function fastArrivalForTesting(){
   setDevMessage("⚡ حالت تست فعال شد؛ ارتش‌ها حدود ۳ ثانیه دیگر به مقصد می‌رسند.");
 }
 
+function updateAttackTravelTimer(){
+  const timer=document.getElementById("attackTravelTimer");
+  if(!timer) return;
+  const attacks=Array.isArray(developmentState.activeAttacks)?developmentState.activeAttacks:[];
+  // تایمر مسیر فقط برای حساب مهاجم نمایش داده می‌شود؛ مدافع فقط هشدار حمله را می‌بیند.
+  const active=attacks.find(a=>a.role!=="defender" && !a.returning && Number(a.remaining)>0);
+  if(!active){
+    timer.style.display="none";
+    return;
+  }
+  timer.textContent=`⏱ زمان رسیدن: ${formatDuration(Math.max(0,Math.ceil(Number(active.remaining)||0)))}`;
+  timer.style.display="block";
+}
+
 function renderArmyMarches(){
+  updateAttackTravelTimer();
   const box=document.getElementById("armyMarches");
   if(!box) return;
-  if(!developmentState.activeAttacks.length){ box.innerHTML=""; return; }
-  box.innerHTML=developmentState.activeAttacks.map(a=>{
+  const attacks=Array.isArray(developmentState.activeAttacks)
+    ? developmentState.activeAttacks.filter(a=>a.role!=="defender")
+    : [];
+  if(!attacks.length){ box.innerHTML=""; return; }
+  box.innerHTML=attacks.map(a=>{
     const pct=Math.max(0,Math.min(100,((a.totalTravel-a.remaining)/Math.max(1,a.totalTravel))*100));
     return `<div class="marchCard"><strong>${a.returning ? "↩️ بازگشت ارتش از " : "⚔️ حرکت به "}${a.targetName}</strong><div class="marchTimer">⏱ زمان باقی‌مانده: ${formatDuration(a.remaining)} | ${Math.floor(pct)}%</div><div style="font-size:11px;opacity:.8">🏹 ${a.composition.archer} | 🐎 ${a.composition.cavalry} | ⚔️ ${a.composition.swordsman}</div></div>`;
   }).join("");
@@ -3898,7 +3925,10 @@ function startBattle(attack) {
       const slot=attack.slots[i]||{}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
       piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null;
     }
-    const defenseSlots=(attack.defenderSetup&&Array.isArray(attack.defenderSetup.slots))?attack.defenderSetup.slots.slice(0,6):[];
+    // در سمت مدافع، آرایش ذخیره‌شده خود حساب منبع اصلی است؛ نسخه داخل رکورد حمله فقط fallback است.
+    const ownDefenseSlots = developmentState.defenderSetups?.self?.slots;
+    const attackDefenseSlots = attack.defenderSetup?.slots;
+    const defenseSlots = (Array.isArray(ownDefenseSlots) ? ownDefenseSlots : (Array.isArray(attackDefenseSlots) ? attackDefenseSlots : [])).slice(0,6);
     for(let i=0;i<6;i++){
       const piece=defenders[i]; if(!piece) continue;
       const slot=defenseSlots[i]||{type:"archer",count:0}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
