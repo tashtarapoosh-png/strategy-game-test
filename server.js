@@ -369,14 +369,14 @@ const server=http.createServer(async(req,res)=>{
       for(const type of UNIT_TYPES){ if(composition[type]>int(u.state.army[type])) return send(res,400,{error:`تعداد ${type} بیشتر از نیروهای موجود است.`}); }
       if(Number(u.state.gold)<cost) return send(res,400,{error:'طلای کافی برای حمله وجود ندارد.'});
       const distance=Math.max(1,num(input.distance,1));
-      const travelSeconds=Math.max(60,int(input.travelSeconds,Math.round(distance*60)));
+      const travelSeconds=0;
       const now=Date.now();
       const attackId=crypto.randomUUID();
       const defenderSetup=sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army);
       u.state.gold-=cost;
       for(const type of UNIT_TYPES) u.state.army[type]-=composition[type];
-      const attack={id:attackId,attackerId:u.id,targetId:defender.id,attackerName:u.username,targetName:defender.username,distance,remaining:travelSeconds,totalTravel:travelSeconds,arrivalAt:now+travelSeconds*1000,status:'traveling',role:'attacker',slots,composition,defenderSetup,attackCost:cost,createdAt:now};
-      const incoming={...attack,role:'defender',remaining:travelSeconds};
+      const attack={id:attackId,attackerId:u.id,targetId:defender.id,attackerName:u.username,targetName:defender.username,distance,remaining:travelSeconds,totalTravel:travelSeconds,arrivalAt:now,status:'arrived',role:'attacker',slots,composition,defenderSetup,attackCost:cost,createdAt:now};
+      const incoming={...attack,role:'defender',remaining:0};
       u.state.activeAttacks=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks:[];
       defender.state.activeAttacks=Array.isArray(defender.state.activeAttacks)?defender.state.activeAttacks:[];
       u.state.activeAttacks.push(attack);
