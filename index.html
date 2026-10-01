@@ -4080,16 +4080,25 @@ function battleIsSharedStarted(attack) {
 }
 
 function battleOwnerIdFromAttack(attack) {
-    const selfId = String(
-        attack?.selfId ??
+    // مالک کنترل همیشه حسابی است که همین مرورگر با آن وارد شده؛
+    // role حمله به‌تنهایی مالک مهره نیست، چون چند مهاجم/مدافع می‌توانند در یک نبرد باشند.
+    const localId = String(
         worldPlayers.find(p => p.self)?.id ??
-        currentUsername ??
+        attack?.selfId ??
         ""
-    );
-    if (attack?.role === "attacker") return String(attack.attackerId ?? selfId);
-    if (attack?.role === "defender") return String(attack.targetId ?? selfId);
-    if (selfId && String(attack?.attackerId) === selfId) return selfId;
-    if (selfId && String(attack?.targetId) === selfId) return selfId;
+    ).trim();
+    if (!localId) return null;
+
+    const slots = battleParticipantSlots(attack);
+    if (Array.isArray(slots) && slots.length) {
+        const isParticipant = slots.some(slot => String(slot.ownerId ?? "") === localId && Number(slot.count) > 0);
+        if (isParticipant) return localId;
+        return null;
+    }
+
+    // سازگاری با داده‌های قدیمی که battleParticipants نداشتند.
+    if (String(attack?.attackerId ?? "") === localId) return localId;
+    if (String(attack?.targetId ?? "") === localId) return localId;
     return null;
 }
 
@@ -4237,18 +4246,19 @@ function startBattle(attack) {
     const validTypes = new Set(["archer", "cavalry", "swordsman"]);
     const localOwnerId = battleOwnerIdFromAttack(attack);
     if (!localOwnerId) {
-        console.warn("مالک این نبرد برای حساب فعلی مشخص نیست.");
-        setDevMessage("مالکیت نیروهای این نبرد برای حساب شما مشخص نشد.");
+        console.warn("بازیکن فعلی عضو این نبرد نیست.");
+        setDevMessage("این بازیکن در نیروهای این نبرد حضور ندارد.");
         return;
     }
 
-    let localSide = 0;
-    if (attack.role === "attacker") localSide = 1;
-    else if (attack.role === "defender") localSide = 2;
-    else if (String(attack.attackerId) === localOwnerId) localSide = 1;
-    else if (String(attack.targetId) === localOwnerId) localSide = 2;
+    // سمت هم از خود participant گرفته می‌شود، نه از role حمله.
+    // این بخش برای چند مهاجم/چند مدافع حیاتی است.
+    const localSlots = battleParticipantSlots(attack).filter(slot =>
+        String(slot.ownerId ?? "") === String(localOwnerId) && Number(slot.count) > 0
+    );
+    const localSide = Number(localSlots[0]?.side) || 0;
     if (!localSide) {
-        console.warn("سمت نبرد برای حساب فعلی مشخص نیست.");
+        console.warn("سمت بازیکن فعلی در آرایه نبرد مشخص نیست.");
         return;
     }
 
@@ -4350,11 +4360,16 @@ async function enterBattleFromDevelopment(){
       onlineRequest('/attacks/incoming'),
       onlineRequest('/attacks/outgoing')
     ]);
-    const incoming=(Array.isArray(incomingData.attacks)?incomingData.attacks:[])
-      .find(a=>a.status==='arrived' && !a.battleEndedAt);
-    const outgoing=(Array.isArray(outgoingData.attacks)?outgoingData.attacks:[])
-      .find(a=>a.status==='arrived' && !a.battleEndedAt);
-    const attack=incoming||outgoing;
+    const incoming=Array.isArray(incomingData.attacks)?incomingData.attacks:[];
+    const outgoing=Array.isArray(outgoingData.attacks)?outgoingData.attacks:[];
+    const selfId=String(worldPlayers.find(p=>p.self)?.id || "");
+    // اگر چند نبرد همزمان وجود داشته باشد، اول نبردی را انتخاب کن که
+    // خود همین بازیکن واقعاً یکی از participantهای آن است.
+    const arrived=[...incoming,...outgoing].filter(a=>a.status==='arrived' && !a.battleEndedAt);
+    const attack=arrived.find(a=>{
+      const slots=battleParticipantSlots(a);
+      return slots.some(s=>String(s.ownerId ?? "")===selfId && Number(s.count)>0);
+    }) || arrived[0];
     if(!attack){
       setDevMessage('⚔️ در حال حاضر نبرد آماده ورود نیست.');
       return;
