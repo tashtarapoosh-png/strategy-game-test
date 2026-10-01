@@ -238,11 +238,26 @@
     }
 
     #attackTravelTimer {
-        position: absolute; z-index: 12; left: 50%; top: 4%; transform: translateX(-50%);
-        display: none; min-width: 150px; padding: 8px 12px; border: 2px solid #ffd54a;
-        border-radius: 9px; background: rgba(15,15,15,.94); color: #fff; font-size: 14px;
-        font-weight: bold; text-align: center; white-space: nowrap; pointer-events: none;
-        box-shadow: 0 2px 7px rgba(0,0,0,.45);
+        position: absolute;
+        z-index: 20;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: none;
+        min-width: 190px;
+        padding: 7px 12px;
+        border: 2px solid #ffd54a;
+        border-radius: 10px;
+        background: rgba(10,10,10,.92);
+        color: #fff;
+        font-size: 14px;
+        font-weight: bold;
+        line-height: 1.3;
+        text-align: center;
+        white-space: nowrap;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,.5);
+        box-sizing: border-box;
     }
 
     #developmentScene {
@@ -889,6 +904,7 @@
             </div>
             <div id="armyMarches"></div>
             <div id="developmentField">
+                <div id="attackTravelTimer" aria-live="polite"></div>
                 <div id="developmentScene">
                     <img id="developmentBackground" class="developmentLayer" src="images/development/development-background.jpg" alt="زمینه قلعه" loading="eager" draggable="false">
                     <img id="developmentWall" class="developmentLayer developmentBuildingImage" data-building="wall" src="images/development/development-wall.png" alt="دیوار قلعه" loading="eager" draggable="false">
@@ -906,7 +922,6 @@
                     <span class="developmentTimerOverlay" id="buildingTimer-barracks1" style="left:22%;top:66%;"></span>
                     <span class="developmentTimerOverlay" id="buildingTimer-barracks2" style="left:78%;top:66%;"></span>
                     <span class="developmentTimerOverlay" id="buildingTimer-goldMine" style="left:50%;top:81%;"></span>
-                    <span id="attackTravelTimer">⏱ زمان رسیدن: 00:00</span>
                     <button type="button" id="developmentDefenseButton" class="developmentDefenseButton">🛡️ چینش دفاع</button>
                 </div>
             </div>
@@ -3853,7 +3868,6 @@ async function launchAttack(){
     document.getElementById("developmentPanel").classList.add("open");
     setDevMessage(`⚔️ ارتش به سمت ${target.name} اعزام شد. زمان رسیدن: ${formatDuration(travelSeconds)}`);
     renderArmyMarches();
-    updateAttackTravelTimer();
   }catch(e){ alert(e.message || "اعزام حمله انجام نشد."); }
 }
 
@@ -3875,24 +3889,38 @@ function updateAttackTravelTimer(){
   const timer=document.getElementById("attackTravelTimer");
   if(!timer) return;
   const attacks=Array.isArray(developmentState.activeAttacks)?developmentState.activeAttacks:[];
-  const active=attacks.find(a=>!a.returning && Number(a.remaining)>0);
-  if(!active){
+  const attack=attacks.find(a=>!a.returning && a.status!=="arrived");
+  if(!attack){
     timer.style.display="none";
+    timer.textContent="";
     return;
   }
-  timer.textContent=`⏱ زمان رسیدن: ${formatDuration(Math.max(0,Math.ceil(Number(active.remaining)||0)))}`;
+  const arrivalAt=Number(attack.arrivalAt)||0;
+  const remaining=arrivalAt>0
+    ? Math.max(0,Math.ceil((arrivalAt-Date.now())/1000))
+    : Math.max(0,Math.ceil(Number(attack.remaining)||0));
+  if(remaining<=0){
+    timer.style.display="none";
+    timer.textContent="";
+    return;
+  }
   timer.style.display="block";
+  timer.textContent=`⚔️ حمله به ${attack.targetName||"قلعه هدف"} | ⏱ ${formatDuration(remaining)}`;
 }
 
 function renderArmyMarches(){
-  updateAttackTravelTimer();
   const box=document.getElementById("armyMarches");
   if(!box) return;
-  if(!developmentState.activeAttacks.length){ box.innerHTML=""; return; }
+  if(!developmentState.activeAttacks.length){ box.innerHTML=""; updateAttackTravelTimer(); return; }
   box.innerHTML=developmentState.activeAttacks.map(a=>{
-    const pct=Math.max(0,Math.min(100,((a.totalTravel-a.remaining)/Math.max(1,a.totalTravel))*100));
-    return `<div class="marchCard"><strong>${a.returning ? "↩️ بازگشت ارتش از " : "⚔️ حرکت به "}${a.targetName}</strong><div class="marchTimer">⏱ زمان باقی‌مانده: ${formatDuration(a.remaining)} | ${Math.floor(pct)}%</div><div style="font-size:11px;opacity:.8">🏹 ${a.composition.archer} | 🐎 ${a.composition.cavalry} | ⚔️ ${a.composition.swordsman}</div></div>`;
+    const liveRemaining=Number(a.arrivalAt)>0 && !a.returning
+      ? Math.max(0,Math.ceil((Number(a.arrivalAt)-Date.now())/1000))
+      : Math.max(0,Number(a.remaining)||0);
+    const total=Math.max(1,Number(a.totalTravel)||1);
+    const pct=Math.max(0,Math.min(100,((total-liveRemaining)/total)*100));
+    return `<div class="marchCard"><strong>${a.returning ? "↩️ بازگشت ارتش از " : "⚔️ حرکت به "}${a.targetName}</strong><div class="marchTimer">⏱ زمان باقی‌مانده: ${formatDuration(liveRemaining)} | ${Math.floor(pct)}%</div><div style="font-size:11px;opacity:.8">🏹 ${a.composition.archer} | 🐎 ${a.composition.cavalry} | ⚔️ ${a.composition.swordsman}</div></div>`;
   }).join("");
+  updateAttackTravelTimer();
 }
 
 // ===============================
@@ -4043,10 +4071,15 @@ async function pollOutgoingAttacks(){
     }
   }catch(e){}
 }
+setInterval(function(){
+  updateAttackTravelTimer();
+  if(document.getElementById("developmentPanel")?.classList.contains("open")) renderArmyMarches();
+},1000);
 setInterval(pollIncomingAttacks,3000);
 setInterval(pollOutgoingAttacks,3000);
 pollIncomingAttacks();
 pollOutgoingAttacks();
+updateAttackTravelTimer();
 
 renderPlayerWorld();
 </script>
