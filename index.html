@@ -200,6 +200,7 @@
     button.devStat:hover {
         background: #2b2b2b;
     }
+    .battleArrivalTimer{width:100%;box-sizing:border-box;margin:4px 0;padding:7px 10px;border:1px solid #ffd54a;border-radius:8px;background:rgba(15,15,15,.94);color:#fff;font-size:14px;font-weight:bold;text-align:center;direction:rtl;display:none;}
     #developmentField {
         position: relative;
         width: 100%;
@@ -833,7 +834,8 @@
             <div id="selectedPlayerDistance"></div>
           </div>
           <div class="mapActionRow">
-            <button type="button" id="attackSelectedPlayerButton">⚔️ آماده‌سازی حمله</button>
+            <button type="button" id="attackSelectedPlayerButton">⚔️ حمله</button>
+            <button type="button" id="defendSelectedPlayerButton">🛡️ دفاع</button>
             <button type="button" id="closeSelectedPlayerButton">لغو انتخاب</button>
           </div>
         </div>
@@ -875,6 +877,7 @@
                     <button type="button" id="enterBattleFromDevelopmentButton" class="devStat">⚔️ ورود به صحنه نبرد</button>
                     <button type="button" id="developmentPlayerMapButton" class="devStat">🌍 نقشه بازیکنان</button>
                 </div>
+                <div id="battleArrivalTimer" class="battleArrivalTimer"></div>
                 <div class="developmentTopRow fastArrivalTopRow">
                     <button type="button" id="fastArrivalTestButton" class="devStat fastArrivalTopButton">⚡ رسیدن سریع نیرو (تست)</button>
                 </div>
@@ -950,7 +953,7 @@
 
 
 
-    <div id="attackPanel"><div class="attackInner"><h2 id="attackTitle">⚔️ آماده‌سازی حمله</h2><div id="attackTargetInfo" class="attackSummary"></div><div class="attackGrid"><div class="attackSlot"><strong>خانه 1</strong><select id="attackType0"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount0" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 2</strong><select id="attackType1"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount1" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 3</strong><select id="attackType2"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount2" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 4</strong><select id="attackType3"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount3" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 5</strong><select id="attackType4"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount4" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 6</strong><select id="attackType5"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount5" type="number" min="0" value="0" placeholder="تعداد"></div></div><div id="attackSummary" class="attackSummary"></div><button type="button" id="launchAttackButton">⚔️ اجرای حمله</button><button type="button" id="closeAttackButton">بستن</button></div></div>
+    <div id="attackPanel"><div class="attackInner"><h2 id="attackTitle">⚔️ آماده‌سازی حمله</h2><div id="attackTargetInfo" class="attackSummary"></div><div class="attackGrid"><div class="attackSlot"><strong>خانه 1</strong><select id="attackType0"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount0" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 2</strong><select id="attackType1"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount1" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 3</strong><select id="attackType2"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount2" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 4</strong><select id="attackType3"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount3" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 5</strong><select id="attackType4"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount4" type="number" min="0" value="0" placeholder="تعداد"></div><div class="attackSlot"><strong>خانه 6</strong><select id="attackType5"><option value="">انتخاب نیرو</option><option value="archer">🏹 کماندار</option><option value="cavalry">🐎 سواره‌نظام</option><option value="swordsman">⚔️ شمشیرزن</option></select><input id="attackCount5" type="number" min="0" value="0" placeholder="تعداد"></div></div><div id="attackSummary" class="attackSummary"></div><button type="button" id="launchAttackButton">⚔️ اجرای حمله</button><button type="button" id="launchDefenseButton" style="display:none">🛡️ اجرای دفاع</button><button type="button" id="closeAttackButton">بستن</button></div></div>
 
 <script>
 
@@ -2915,6 +2918,33 @@ function queueRecovery(type, count, winner) {
     if (recover > 0) developmentState.pendingRecoveries.push({type, count:recover, dueAt:Date.now()+3600000});
 }
 
+function getNextBattleArrivalSeconds() {
+    const attacks = Array.isArray(developmentState.activeAttacks) ? developmentState.activeAttacks : [];
+    const active = attacks.filter(function(a){ return !a.returning; });
+    if (!active.length) return null;
+    const values = active.map(function(a){
+        const remaining = Number(a.remaining);
+        if (Number.isFinite(remaining)) return Math.max(0, remaining);
+        const arrivalAt = Number(a.arrivalAt);
+        if (Number.isFinite(arrivalAt)) return Math.max(0, (arrivalAt - Date.now()) / 1000);
+        return null;
+    }).filter(function(v){ return v !== null; });
+    return values.length ? Math.min.apply(Math, values) : null;
+}
+
+function updateBattleArrivalTimer() {
+    const el = document.getElementById("battleArrivalTimer");
+    if (!el) return;
+    const seconds = getNextBattleArrivalSeconds();
+    if (seconds === null || seconds <= 0) {
+        el.textContent = "";
+        el.style.display = "none";
+        return;
+    }
+    el.textContent = `⏱ زمان رسیدن نیروها: ${formatDuration(seconds)}`;
+    el.style.display = "block";
+}
+
 function processDevelopmentElapsed(seconds) {
     processPendingRecoveries();
     let remaining = Math.max(0, seconds);
@@ -3054,6 +3084,7 @@ function updateDevelopmentUI() {
         timerEl.style.display = text ? "block" : "none";
     });
 
+    updateBattleArrivalTimer();
 }
 
 function isUpgradeRunning() {
@@ -3772,8 +3803,7 @@ function saveDefenseSetup(){
   setDevMessage("🛡️ آرایش ۶ لاین دفاعی قلعه شما ذخیره شد.");
 }
 
-function openAttackPanel(){
-  // از لیست واقعی سرور استفاده کن و هنگام کلیک روی حمله، نقشه را دوباره با داده ساختگی بازسازی نکن.
+function openAttackPanel(mode="attack"){
   const selectedKey = String(selectedWorldPlayer ?? "");
   const player = worldPlayers.find(p => String(p.id) === selectedKey) || worldPlayers.find(p => !p.self);
   if(!player || player.self) {
@@ -3783,9 +3813,12 @@ function openAttackPanel(){
   selectedWorldPlayer=player.id;
   const myIndex=worldPlayers.findIndex(p=>p.self);
   const distance=Math.max(1,Math.abs(player.cell-(myIndex < 0 ? 0 : myIndex*10))/10);
+  const panel=document.getElementById("attackPanel");
+  panel.dataset.targetId=player.id;
+  panel.dataset.distance=distance;
+  panel.dataset.mode=mode;
+  document.getElementById("attackTitle").textContent = mode === "defense" ? "🛡️ آماده‌سازی دفاع" : "⚔️ آماده‌سازی حمله";
   document.getElementById("attackTargetInfo").innerHTML=`هدف: <strong>${player.name}</strong><br>فاصله: ${distance} خانه<br>زمان رسیدن: ${distance} دقیقه`;
-  document.getElementById("attackPanel").dataset.targetId=player.id;
-  document.getElementById("attackPanel").dataset.distance=distance;
   for(let i=0;i<6;i++){
     document.getElementById("attackType"+i).value="";
     document.getElementById("attackCount"+i).value=0;
@@ -3794,6 +3827,8 @@ function openAttackPanel(){
   updateAttackSummary();
   document.getElementById("playerMapPanel").classList.remove("open");
   document.getElementById("attackPanel").classList.add("open");
+  document.getElementById("launchAttackButton").style.display = mode === "attack" ? "inline-block" : "none";
+  document.getElementById("launchDefenseButton").style.display = mode === "defense" ? "inline-block" : "none";
 }
 
 function updateAttackSummary(){
@@ -3810,6 +3845,7 @@ function updateAttackSummary(){
 
 async function launchAttack(){
   const panel=document.getElementById("attackPanel");
+  if(panel.dataset.mode === "defense") return;
   const targetId=String(panel.dataset.targetId || "");
   const target=worldPlayers.find(p=>String(p.id)===targetId);
   if(!target) return;
@@ -3842,6 +3878,7 @@ async function launchAttack(){
     saveDevelopmentState(); updateDevelopmentUI();
     panel.classList.remove("open");
     document.getElementById("developmentPanel").classList.add("open");
+    updateBattleArrivalTimer();
     setDevMessage(`⚔️ ارتش به سمت ${target.name} اعزام شد. زمان رسیدن: ${formatDuration(travelSeconds)}`);
     renderArmyMarches();
   }catch(e){ alert(e.message || "اعزام حمله انجام نشد."); }
@@ -3951,7 +3988,13 @@ document.getElementById("enterBattleFromDevelopmentButton")?.addEventListener("c
 document.getElementById("closePlayerMapButton").addEventListener("click",closeMapAndReturn);
 document.getElementById("closeSelectedPlayerButton").addEventListener("click",function(){selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
 document.getElementById("attackSelectedPlayerButton").onclick = function(e){ e.preventDefault(); e.stopImmediatePropagation(); openAttackPanel(); };
+document.getElementById("defendSelectedPlayerButton").onclick = function(e){ e.preventDefault(); e.stopImmediatePropagation(); openAttackPanel("defense"); };
 document.addEventListener("click", function(e){ const btn=e.target.closest && e.target.closest("#attackSelectedPlayerButton"); if(btn){ e.preventDefault(); e.stopPropagation(); openAttackPanel(); } });
+document.getElementById("launchDefenseButton").addEventListener("click",function(){
+  document.getElementById("attackPanel").classList.remove("open");
+  document.getElementById("developmentPanel").classList.add("open");
+  setDevMessage("🛡️ نیروهای دفاعی انتخاب شدند.");
+});
 document.getElementById("closeAttackButton").addEventListener("click",function(){document.getElementById("attackPanel").classList.remove("open");});
 function logoutGame(){
   try{
