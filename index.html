@@ -2379,57 +2379,87 @@ function returnAttackingArmyWithoutBattle(attack) {
 
 function batman() {
     const attack = window.currentBattleAttack;
-    if (!attack || !gameStarted) return;
-    if (window.batmanProcessedAttackIds.has(String(attack.id))) return;
+    if (!attack) return;
 
+    // اگر این حمله قبلاً برای یک bat ثبت شده، دوباره bat id نساز.
+    const attackKey = String(attack.id || attack.batId || "");
+    if (attackKey && window.batmanProcessedAttackIds.has(attackKey)) return;
+
+    // این مرحله فقط ثبت اولیه نبرد است؛ هیچ نبرد فعالی نباید اجرا شود.
     const batId = getNextBatId();
     const rows = [];
     const validTypes = new Set(["archer", "cavalry", "swordsman"]);
 
-    // مهاجم: اطلاعات از ۶ اسلات حمله روی نقشه بازیکنان.
-    const attackSlots = Array.isArray(attack.slots) ? attack.slots.slice(0, 6) : [];
+    // مهاجم: اطلاعات از ۶ اسلات صفحه حمله نقشه بازیکنان.
+    const attackSlots = Array.isArray(attack.slots)
+        ? attack.slots.slice(0, 6)
+        : [];
+
     attackSlots.forEach(function (slot) {
         const type = validTypes.has(slot?.type) ? slot.type : null;
         const count = Math.max(0, Math.floor(Number(slot?.count) || 0));
         if (!type || count <= 0) return;
-        rows.push([type, count, String(attack.attackerId || ""), "مهاجم", 0, 0]);
+
+        rows.push([
+            type,
+            count,
+            String(attack.attackerId || ""),
+            "مهاجم",
+            0,
+            0
+        ]);
     });
 
-    // مدافع: اطلاعات از آرایش دفاعی قلعه هدف.
-    const defenseSlots = attack.defenderSetup && Array.isArray(attack.defenderSetup.slots)
+    // مدافع: اطلاعات از آرایش دفاعی قلعه مورد حمله.
+    const defenseSlots = Array.isArray(attack.defenderSetup?.slots)
         ? attack.defenderSetup.slots.slice(0, 6)
         : [];
+
     defenseSlots.forEach(function (slot) {
         const type = validTypes.has(slot?.type) ? slot.type : null;
         const count = Math.max(0, Math.floor(Number(slot?.count) || 0));
         if (!type || count <= 0) return;
-        rows.push([type, count, String(attack.targetId || ""), "مدافع", 0, 0]);
+
+        rows.push([
+            type,
+            count,
+            String(attack.targetId || ""),
+            "مدافع",
+            0,
+            0
+        ]);
     });
 
-    window.batmanProcessedAttackIds.add(String(attack.id));
+    // اگر واقعاً هیچ نیرویی در این درگیری وجود ندارد، bat ثبت نشود.
+    if (rows.length === 0) return;
+
+    if (attackKey) {
+        window.batmanProcessedAttackIds.add(attackKey);
+    }
+
     window.currentBatId = batId;
     attack.batId = batId;
     attack.batmanRows = rows;
 
+    // نمایش صرفاً اطلاعات ثبت‌شده؛ هنوز هیچ محاسبه جنگی انجام نمی‌شود.
     showBatmanTable(batId, rows);
 
-    // در این مرحله هیچ نبردی انجام نمی‌شود؛ فقط ارتش مهاجم برای بازگشت ثبت می‌شود.
+    // نیروهای مهاجم بدون هیچ جنگی برمی‌گردند.
     returnAttackingArmyWithoutBattle(attack);
     saveDevelopmentState();
     updateDevelopmentUI();
 
-    // این نبرد در این مرحله تمام‌شده/بسته می‌شود؛ هیچ تابع نبرد یا حرکت دیگری اجرا نمی‌شود.
+    // این مرحله تمام شد؛ دیگر تایمر نبرد و هیچ منطق جنگی اجرا نمی‌شود.
     gameStarted = false;
     executing = false;
+    movementAnimationRunning = false;
+    window.currentBattleAttack = null;
+    window.currentBattleSlots = [];
     document.getElementById("battleRetreatControls")?.classList.remove("open");
-    selectedPiece = null;
-    for (const piece of pieces) {
-        piece.command = "dead";
-        piece.target = null;
-        piece.health = 0;
-        piece.count = 0;
-    }
     draw();
+
+    // مهم: در این مرحله هیچ تابع پایان نبرد، حرکت یا محاسبه آسیب اجرا نمی‌شود.
+    // خود وضعیت مهره‌های صحنه نیز دستکاری نمی‌شود.
 }
 
 function executeBattles() {
@@ -4059,39 +4089,29 @@ let battleInputSlots = [];
 
 function startBattle(attack) {
     if (!attack || !Array.isArray(attack.slots)) return;
-    const validTypes = new Set(["archer", "cavalry", "swordsman"]);
-    const attackerSide = String(attack.attackerId) === String(worldPlayers.find(p=>p.self)?.id) ? 1 : 2;
-    currentBattleRole = attackerSide;
-    localPlayer = attackerSide;
-    // فقط صاحب این حساب اجازه کنترل طرف خودش را دارد؛ طرف مقابل فقط توسط منطق نبرد/سرور پیش می‌رود.
-    playerConnected = {1:attackerSide===1,2:attackerSide===2};
 
-    const attackers = pieces.filter(p => p.player === 1);
-    const defenders = pieces.filter(p => p.player === 2);
-    attackers.forEach((piece,i)=>{ piece.x=250+(i%6)*100; piece.y=350; piece._moveFrom=null; piece._moveStartedAt=0; piece.target=null; piece._plannedMoveRound=null; });
-    defenders.forEach((piece,i)=>{ piece.x=250+(i%6)*100; piece.y=1550; piece._moveFrom=null; piece._moveStartedAt=0; piece.target=null; piece._plannedMoveRound=null; });
+    // در نسخه فعلی این تابع فقط حمله آماده‌شده را برای batman نگه می‌دارد.
+    // هیچ نیرو، میدان نبرد یا منطق جنگی در این مرحله فعال نمی‌شود.
+    if (gameStarted || window.currentBattleAttack) return;
 
-    for(let i=0;i<6;i++){
-      const piece=attackers[i]; if(!piece) continue;
-      const slot=attack.slots[i]||{}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
-      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null; piece.ownerId=String(attack.attackerId||""); piece.side="attacker";
-    }
-    const defenseSlots=(attack.defenderSetup&&Array.isArray(attack.defenderSetup.slots))?attack.defenderSetup.slots.slice(0,6):[];
-    for(let i=0;i<6;i++){
-      const piece=defenders[i]; if(!piece) continue;
-      const slot=defenseSlots[i]||{type:"archer",count:0}; const type=validTypes.has(slot.type)?slot.type:"archer"; const count=Math.max(0,Math.floor(Number(slot.count)||0));
-      piece.type=type; piece.count=count; piece._battleInitialCount=count; piece.health=count*stats[type].unitHealth; piece.command=count>0?"battle":"dead"; piece.target=null; piece.ownerId=String(attack.targetId||""); piece.side="defender";
-    }
-    attack.attackCost=Math.max(0,Math.floor(Number(attack.attackCost)||0));
-    window.currentBattleAttack=attack; window.currentBattleSlots=attack.slots.slice(0,6);
-    selectedPiece=null; const resultEl=document.getElementById("battleResult"); if(resultEl) resultEl.style.display="none";
-    round=1; timeLeft=20; gameStarted=true; executing=false; movementAnimationRunning=false;
-    const retreatControls=document.getElementById("battleRetreatControls");
-    if(retreatControls){ retreatControls.classList.add("open"); retreatControls.querySelectorAll("[data-retreat-player]").forEach(btn=>btn.style.display=Number(btn.dataset.retreatPlayer)===currentBattleRole?"inline-block":"none"); }
+    window.currentBattleAttack = attack;
+    window.currentBattleSlots = attack.slots.slice(0, 6);
+    window.currentBatId = null;
+
+    selectedPiece = null;
+    round = 1;
+    timeLeft = 20;
+    gameStarted = true;
+    executing = false;
+    movementAnimationRunning = false;
+
+    const retreatControls = document.getElementById("battleRetreatControls");
+    if (retreatControls) retreatControls.classList.remove("open");
+
     document.getElementById("developmentPanel")?.classList.remove("open");
     document.getElementById("armyMarches")?.replaceChildren();
     draw();
-    setDevMessage(currentBattleRole===1?"⚔️ نبرد آغاز شد؛ شما مهاجم هستید.":"🛡️ حمله به قلعه شما رسید؛ شما مدافع هستید.");
+    setDevMessage("⚔️ حمله آماده ثبت است؛ با صفر شدن تایمر فقط batman اجرا می‌شود.");
 }
 
 function closeMapAndReturn(){document.getElementById("playerMapPanel").classList.remove("open");document.getElementById("developmentPanel").classList.add("open");}
