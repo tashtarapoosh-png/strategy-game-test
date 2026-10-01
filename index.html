@@ -2267,7 +2267,21 @@ function multiplier(
 ================================ */
 
 let nextBatId = Math.max(0, Number(localStorage.getItem("strategy_next_bat_id") || 0));
-window.batmanProcessedAttackIds = window.batmanProcessedAttackIds || new Set();
+window.batmanProcessedAttackIds = window.batmanProcessedAttackIds || new Set(
+    JSON.parse(localStorage.getItem("strategy_batman_processed_attacks") || "[]")
+);
+
+function markBatmanAttackProcessed(attackId) {
+    const key = String(attackId || "");
+    if (!key) return;
+    window.batmanProcessedAttackIds.add(key);
+    try {
+        localStorage.setItem(
+            "strategy_batman_processed_attacks",
+            JSON.stringify(Array.from(window.batmanProcessedAttackIds).slice(-500))
+        );
+    } catch (e) {}
+}
 
 function getNextBatId() {
     nextBatId += 1;
@@ -2434,7 +2448,7 @@ function batman() {
     if (rows.length === 0) return;
 
     if (attackKey) {
-        window.batmanProcessedAttackIds.add(attackKey);
+        markBatmanAttackProcessed(attackKey);
     }
 
     window.currentBatId = batId;
@@ -4203,7 +4217,10 @@ async function pollIncomingAttacks(){
   try{
     const data=await onlineRequest('/attacks/incoming');
     const attacks=Array.isArray(data.attacks)?data.attacks:[];
-    const active=attacks.filter(a=>a.status==='traveling' || a.status==='arrived');
+    const active=attacks.filter(a=>
+      (a.status==='traveling' || a.status==='arrived') &&
+      !window.batmanProcessedAttackIds.has(String(a.id))
+    );
     if(active.length){
       let box=document.getElementById('incomingAttackNotice');
       if(!box){ box=document.createElement('div'); box.id='incomingAttackNotice'; box.style.cssText='position:fixed;top:15px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(120,0,0,.96);border:2px solid #ffd54a;border-radius:12px;padding:12px 16px;color:#fff;font-weight:700;max-width:90vw;'; document.body.appendChild(box); }
@@ -4218,7 +4235,11 @@ async function pollOutgoingAttacks(){
   try{
     const data=await onlineRequest('/attacks/outgoing');
     const attacks=Array.isArray(data.attacks)?data.attacks:[];
-    const arrived=attacks.find(a=>a.status==='arrived' && !a.battleEndedAt);
+    const arrived=attacks.find(a=>
+      a.status==='arrived' &&
+      !a.battleEndedAt &&
+      !window.batmanProcessedAttackIds.has(String(a.id))
+    );
     if(arrived){
       // فقط مهاجمِ صاحب همین حساب نبرد را باز می‌کند.
       const selfId=worldPlayers.find(p=>p.self)?.id;
