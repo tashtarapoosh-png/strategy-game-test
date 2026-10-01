@@ -1927,7 +1927,7 @@ function draw() {
         );
 
         // شناسه مالک در گوشه سمت راست هر واحد؛ رنگ مهره همچنان بر اساس تیم است.
-        const ownerLabel = String(piece.ownerId ?? "").trim();
+        const ownerLabel = piece.ownerNumber != null ? String(piece.ownerNumber) : "";
         if (ownerLabel) {
             ctx.save();
             ctx.font = "bold 10px Arial";
@@ -4124,11 +4124,13 @@ function validBattleUnitType(type) {
     return ["archer", "cavalry", "swordsman"].includes(type) ? type : "archer";
 }
 
-function resetBattlePiece(piece, side, ownerId, x, y, ownerName="بازیکن") {
+function resetBattlePiece(piece, side, ownerId, x, y, ownerName="بازیکن", ownerNumber=null) {
     piece.side = side;
     piece.player = side;
+    // شناسه واقعی برای کنترل/مالکیت حفظ می‌شود؛ شماره نمایشی جداگانه است.
     piece.ownerId = String(ownerId);
     piece.ownerName = String(ownerName || "بازیکن");
+    piece.ownerNumber = Number.isFinite(Number(ownerNumber)) ? Number(ownerNumber) : null;
     piece.team = side === 1 ? "مهاجم" : "مدافع";
     piece.x = x;
     piece.y = y;
@@ -4176,9 +4178,26 @@ function getBattleStartPosition(side, ownerId, slotIndex, allSlots) {
 
 function battleParticipantSlots(attack){
     const participants = normalizeBattleParticipants(attack);
-    if(participants) return [...participants.attackers.map(s=>({...s,side:1})), ...participants.defenders.map(s=>({...s,side:2}))];
+    if(participants){
+        const attackers=[...participants.attackers.map(s=>({...s,side:1}))];
+        const defenders=[...participants.defenders.map(s=>({...s,side:2}))];
+
+        // چینش دفاعی قلعه هدف منبع قطعی دفاع است. اگر آرایه مشترک سرور
+        // دفاع را نداشت/خالی بود، مستقیماً از defenderSetup استفاده می‌کنیم.
+        const targetId=String(attack?.targetId ?? "");
+        const hasTargetDefense=defenders.some(s=>String(s.ownerId)===targetId && Number(s.count)>0);
+        if(!hasTargetDefense && Array.isArray(attack?.defenderSetup?.slots)){
+            const fallback=attack.defenderSetup.slots.slice(0,6).map((x,i)=>({
+                side:2, ownerId:targetId, ownerName:String(attack.defenderName||attack.targetName||"مدافع"),
+                team:"مدافع", slotIndex:i, type:validBattleUnitType(x?.type),
+                count:Math.max(0,Math.floor(Number(x?.count)||0))
+            }));
+            if(fallback.some(s=>s.count>0)) defenders.push(...fallback);
+        }
+        return [...attackers,...defenders];
+    }
     const attackers=Array.from({length:6},(_,i)=>{const x=attack.slots?.[i]||{};return {side:1,ownerId:String(attack.attackerId),ownerName:String(attack.attackerName||"مهاجم"),team:"مهاجم",slotIndex:i,type:validBattleUnitType(x.type),count:Math.max(0,Math.floor(Number(x.count)||0))};});
-    const defenders=Array.from({length:6},(_,i)=>{const x=attack.defenderSetup?.slots?.[i]||{};return {side:2,ownerId:String(attack.targetId),ownerName:String(attack.defenderName||"مدافع"),team:"مدافع",slotIndex:i,type:validBattleUnitType(x.type),count:Math.max(0,Math.floor(Number(x.count)||0))};});
+    const defenders=Array.from({length:6},(_,i)=>{const x=attack.defenderSetup?.slots?.[i]||{};return {side:2,ownerId:String(attack.targetId),ownerName:String(attack.defenderName||attack.targetName||"مدافع"),team:"مدافع",slotIndex:i,type:validBattleUnitType(x.type),count:Math.max(0,Math.floor(Number(x.count)||0))};});
     return [...attackers,...defenders];
 }
 
@@ -4196,7 +4215,12 @@ function mergeBattleParticipants(attack){
         let piece=pieces.find(p=>!p._battleKey && p.health<=0);
         if(!piece){piece={player:slot.side,side:slot.side,ownerId:'',type:'archer',x:0,y:0,count:0,health:0,command:'dead',target:null};pieces.push(piece);}
         const pos=getBattleStartPosition(slot.side,slot.ownerId,slot.slotIndex,slots);
-        resetBattlePiece(piece,slot.side,slot.ownerId,pos.x*CELL_SIZE+CELL_SIZE/2,pos.y*CELL_SIZE+CELL_SIZE/2,slot.ownerName);
+        const ownerNumbers = new Map();
+        for (const item of slots) {
+            const id = String(item.ownerId ?? "");
+            if (!ownerNumbers.has(id)) ownerNumbers.set(id, ownerNumbers.size + 1);
+        }
+        resetBattlePiece(piece,slot.side,slot.ownerId,pos.x*CELL_SIZE+CELL_SIZE/2,pos.y*CELL_SIZE+CELL_SIZE/2,slot.ownerName,ownerNumbers.get(String(slot.ownerId ?? "")) || null);
         piece.type=validBattleUnitType(slot.type);
         piece.count=Math.max(0,Math.floor(Number(slot.count)||0));
         piece._battleInitialCount=piece.count;
@@ -4234,28 +4258,24 @@ function startBattle(attack) {
     battleLocalSide = localSide;
     localPlayer = localSide;
 
-    // مدل چندنفره: اگر سرور battleParticipants بدهد، هر اسلات مالک مستقل خودش را حفظ می‌کند.
-    // در نسخه فعلی که یک مهاجم و یک مدافع دارد، همان attack.slots / defenderSetup استفاده می‌شود.
-    const participants = normalizeBattleParticipants(attack);
-    const attackerSlots = participants
-        ? participants.attackers
-        : Array.from({length:6}, (_,i) => {
-            const slot = attack.slots?.[i] || {};
-            return {side:1, ownerId:String(attack.attackerId), slotIndex:i, type:validBattleUnitType(slot.type), count:Math.max(0,Math.floor(Number(slot.count)||0))};
-        });
-    const defenderSource = attack.defenderSetup?.slots;
-    const defenderSlots = participants
-        ? participants.defenders
-        : Array.from({length:6}, (_,i) => {
-            const slot = defenderSource?.[i] || {};
-            return {side:2, ownerId:String(attack.targetId), slotIndex:i, type:validBattleUnitType(slot.type), count:Math.max(0,Math.floor(Number(slot.count)||0))};
-        });
+    // یک منبع واحد برای مهره‌های رسیده: چند مهاجم + چینش دفاعی قلعه + هر مدافع بعدی.
+    // در صورت ناقص بودن battleParticipants، چینش دفاعی داخل خود حمله نیز به‌عنوان fallback وارد می‌شود.
+    const allBattleSlots = battleParticipantSlots(attack);
+    const attackerSlots = allBattleSlots.filter(s => Number(s.side) === 1);
+    const defenderSlots = allBattleSlots.filter(s => Number(s.side) === 2);
 
     // در هر نبرد، فقط مهره‌های مورد استفاده ساخته/پاک می‌شوند؛ مالکیت هر مهره صریحاً ثبت می‌شود.
     pieces.forEach(p => { p.command="dead"; p.target=null; p.health=0; p.count=0; });
     selectedPiece = null;
 
     const allSlots = [...attackerSlots.map(s=>({...s, side:1})), ...defenderSlots.map(s=>({...s, side:2}))];
+
+    // شماره نمایشی مالک‌ها در همین نبرد: ۱، ۲، ۳، ...
+    const ownerNumbers = new Map();
+    for (const slot of allSlots) {
+        const key = String(slot.ownerId ?? "");
+        if (!ownerNumbers.has(key)) ownerNumbers.set(key, ownerNumbers.size + 1);
+    }
     while (pieces.length < allSlots.length) {
         pieces.push({player:1,side:1,ownerId:"",type:"archer",x:0,y:0,count:0,health:0,command:"dead",target:null});
     }
@@ -4269,7 +4289,8 @@ function startBattle(attack) {
             slot.ownerId,
             pos.x * CELL_SIZE + CELL_SIZE / 2,
             pos.y * CELL_SIZE + CELL_SIZE / 2,
-            slot.ownerName
+            slot.ownerName,
+            ownerNumbers.get(String(slot.ownerId ?? "")) || null
         );
         piece._battleKey = `${slot.side}:${String(slot.ownerId)}:${slot.slotIndex}`;
         piece.type = validTypes.has(slot.type) ? slot.type : "archer";
