@@ -1818,11 +1818,10 @@ function draw() {
       محدوده حرکت
     */
 
-    if (selectedPiece) {
-
-        drawMoveRange(
-            selectedPiece
-        );
+    if (selectedPiece && canControlBattlePiece(selectedPiece)) {
+        drawMoveRange(selectedPiece);
+    } else if (selectedPiece) {
+        selectedPiece = null;
     }
 
 
@@ -2343,173 +2342,395 @@ function multiplier(
 
 
 /* ===============================
-   نبرد
+   موتور جدید نبرد
+   مالکیت، آرایش اولیه و اجرای راند از هم جدا هستند.
 ================================ */
 
 function executeBattles() {
+    if (!gameStarted) return;
 
     const attacks = [];
 
-
-    /*
-      ثبت تمام حمله‌ها
-    */
-
+    // نبرد کاملاً خودکار است؛ حضور هیچ بازیکنی برای اجرای حمله لازم نیست.
     for (const attacker of pieces) {
+        if (!attacker || attacker.health <= 0 || attacker.command === "move") continue;
 
-        if (
-            attacker.health <= 0 ||
-            attacker.command !== "battle"
-        ) {
-            continue;
-        }
-
-
-        const targets =
-            pieces.filter(
-                target =>
-
+        const targets = pieces
+            .filter(target =>
+                target &&
                 target.health > 0 &&
+                Number(target.side) !== Number(attacker.side) &&
+                isAttackRange(attacker, target)
+            )
+            .sort((a, b) => {
+                const da = Math.abs(a.x - attacker.x) + Math.abs(a.y - attacker.y);
+                const db = Math.abs(b.x - attacker.x) + Math.abs(b.y - attacker.y);
+                return da - db;
+            });
 
-                target.side !==
-                    attacker.side &&
+        if (!targets.length) continue;
 
-                isAttackRange(
-                    attacker,
-                    target
-                )
-            );
+        // نیرو بین تمام اهداف قابل دسترس تقسیم می‌شود.
+        const totalUnits = Math.max(0, Math.floor(Number(attacker.count) || 0));
+        if (totalUnits < 1) continue;
 
-
-        if (
-            targets.length === 0
-        ) {
-            continue;
-        }
-
-
-        /*
-          تقسیم نیرو بین اهداف
-        */
-
-        const totalUnits =
-            attacker.count;
-
-
-        const base =
-            Math.floor(
-                totalUnits /
-                targets.length
-            );
-
-
-        let remainder =
-            totalUnits %
-            targets.length;
-
+        const base = Math.floor(totalUnits / targets.length);
+        let remainder = totalUnits % targets.length;
 
         for (const target of targets) {
-
-            let attackingUnits =
-                base;
-
-
-            if (remainder > 0) {
-
-                attackingUnits++;
-
-                remainder--;
-            }
-
-
-            if (
-                attackingUnits <= 0
-            ) {
-                continue;
-            }
-
-
-            const damage =
-
-                attackingUnits *
-
-                stats[
-                    attacker.type
-                ].unitDamage *
-
-                multiplier(
-                    attacker.type,
-                    target.type
-                );
-
+            const units = base + (remainder-- > 0 ? 1 : 0);
+            if (units <= 0) continue;
 
             attacks.push({
-
                 attacker,
-
                 target,
-
-                damage
+                damage: units * stats[attacker.type].unitDamage * multiplier(attacker.type, target.type)
             });
         }
     }
 
-
-    /*
-      اعمال آسیب
-    */
-
-    for (const attack of attacks) {
-
-        if (
-            attack.target.health <= 0
-        ) {
-            continue;
-        }
-
-
-        attack.target.health -=
-            attack.damage;
+    // آسیب‌ها هم‌زمان اعمال می‌شوند تا ترتیب قطعات روی نتیجه اثر نگذارد.
+    for (const hit of attacks) {
+        if (hit.target.health <= 0) continue;
+        hit.target.health = Math.max(0, hit.target.health - hit.damage);
     }
 
-
-    /*
-      محاسبه تعداد باقی‌مانده
-    */
-
     for (const piece of pieces) {
-
-        if (
-            piece.health <= 0
-        ) {
-
+        if (piece.health <= 0) {
             piece.health = 0;
-
             piece.count = 0;
-
+            piece.command = "dead";
             continue;
         }
-
-
-        piece.count =
-            Math.ceil(
-                piece.health /
-                stats[piece.type]
-                    .unitHealth
-            );
-
-
-        if (
-            piece.count < 1
-        ) {
-
-            piece.count = 0;
-
+        piece.count = Math.max(0, Math.ceil(piece.health / stats[piece.type].unitHealth));
+        if (piece.count <= 0) {
             piece.health = 0;
+            piece.command = "dead";
         }
     }
 }
 
+function getBattleSelfId(attack = null) {
+    // مالک کنترل همیشه شناسه واقعی همین حساب است؛ نه side و نه role نبرد.
+    const fromAttack = attack?.selfId ?? attack?.currentPlayerId ?? null;
+    const fromWindow = window.currentBattleSelfId ?? null;
+    const fromWorld = worldPlayers.find(p => p && p.self)?.id ?? null;
+    return String(fromAttack ?? fromWindow ?? fromWorld ?? "").trim();
+}
+
+function isLocalBattleOwner(piece) {
+    if (!piece || piece.health <= 0 || !gameStarted) return false;
+    const selfId = getBattleSelfId();
+    return Boolean(selfId && String(piece.ownerId ?? "") === selfId);
+}
+
+function battleOwnerIdFromAttack(attack) {
+    const selfId = getBattleSelfId();
+    if (!selfId) return null;
+
+    const slots = battleParticipantSlots(attack);
+    if (!slots.length) return null;
+
+    return slots.some(slot =>
+        String(slot.ownerId ?? "") === selfId && Number(slot.count) > 0
+    ) ? selfId : null;
+}
+
+function canControlBattlePiece(piece) {
+    // یک منبع واحد برای مالکیت: شناسه حساب واردشده به نبرد.
+    if (!gameStarted || !controlledBattleOwnerId || !piece || piece.health <= 0) return false;
+    return String(piece.ownerId ?? "") === String(controlledBattleOwnerId) &&
+           String(piece.ownerId ?? "") === getBattleSelfId();
+}
+
+function validBattleUnitType(type) {
+    return ["archer", "cavalry", "swordsman"].includes(type) ? type : "archer";
+}
+
+function normalizeBattleParticipants(attack) {
+    const participants = attack?.battleParticipants;
+    if (!participants) return null;
+
+    const normalize = (list, side) => {
+        if (!Array.isArray(list)) return [];
+        return list.flatMap((entry, participantIndex) => {
+            const ownerId = String(entry?.id ?? entry?.playerId ?? entry?.ownerId ?? "").trim();
+            if (!ownerId) return [];
+            const ownerName = String(entry?.username ?? entry?.name ?? "بازیکن");
+            const slots = Array.isArray(entry?.slots) ? entry.slots : [];
+            return slots.slice(0, 6).map((slot, slotIndex) => ({
+                side,
+                ownerId,
+                ownerName,
+                team: side === 1 ? "مهاجم" : "مدافع",
+                slotIndex,
+                type: validBattleUnitType(slot?.type),
+                count: Math.max(0, Math.floor(Number(slot?.count) || 0))
+            }));
+        });
+    };
+
+    return {
+        attackers: normalize(participants.attackers, 1),
+        defenders: normalize(participants.defenders, 2)
+    };
+}
+
+function battleParticipantSlots(attack) {
+    const normalized = normalizeBattleParticipants(attack);
+
+    if (normalized) {
+        const attackers = normalized.attackers.slice();
+        const defenders = normalized.defenders.slice();
+
+        // دفاع قلعه همیشه باید از defenderSetup قابل بازیابی باشد.
+        const targetId = String(attack?.targetId ?? "");
+        const hasTargetDefense = defenders.some(s =>
+            String(s.ownerId) === targetId && Number(s.count) > 0
+        );
+
+        if (!hasTargetDefense && Array.isArray(attack?.defenderSetup?.slots)) {
+            const ownerName = String(
+                attack?.defenderName || attack?.targetName || "مدافع"
+            );
+            attack.defenderSetup.slots.slice(0, 6).forEach((slot, slotIndex) => {
+                defenders.push({
+                    side: 2,
+                    ownerId: targetId,
+                    ownerName,
+                    team: "مدافع",
+                    slotIndex,
+                    type: validBattleUnitType(slot?.type),
+                    count: Math.max(0, Math.floor(Number(slot?.count) || 0))
+                });
+            });
+        }
+
+        return attackers.concat(defenders);
+    }
+
+    // سازگاری با حمله‌های قدیمی که battleParticipants نداشتند.
+    const attackers = Array.from({ length: 6 }, (_, i) => {
+        const slot = attack?.slots?.[i] || {};
+        return {
+            side: 1,
+            ownerId: String(attack?.attackerId ?? ""),
+            ownerName: String(attack?.attackerName || "مهاجم"),
+            team: "مهاجم",
+            slotIndex: i,
+            type: validBattleUnitType(slot.type),
+            count: Math.max(0, Math.floor(Number(slot.count) || 0))
+        };
+    });
+
+    const defenders = Array.from({ length: 6 }, (_, i) => {
+        const slot = attack?.defenderSetup?.slots?.[i] || {};
+        return {
+            side: 2,
+            ownerId: String(attack?.targetId ?? ""),
+            ownerName: String(attack?.defenderName || attack?.targetName || "مدافع"),
+            team: "مدافع",
+            slotIndex: i,
+            type: validBattleUnitType(slot.type),
+            count: Math.max(0, Math.floor(Number(slot.count) || 0))
+        };
+    });
+
+    return attackers.concat(defenders);
+}
+
+function resetBattlePiece(piece, side, ownerId, x, y, ownerName = "بازیکن", ownerNumber = null) {
+    piece.side = Number(side);
+    piece.player = Number(side); // سازگاری با سیستم قدیمی تصویر آبی/قرمز
+    piece.ownerId = String(ownerId ?? ""); // شناسه واقعی؛ هرگز برای نمایش استفاده نمی‌شود
+    piece.ownerName = String(ownerName || "بازیکن");
+    piece.ownerNumber = Number.isFinite(Number(ownerNumber)) ? Number(ownerNumber) : null;
+    piece.team = Number(side) === 1 ? "مهاجم" : "مدافع";
+    piece.x = x;
+    piece.y = y;
+    piece._moveFrom = null;
+    piece._moveStartedAt = 0;
+    piece._moveDuration = 0;
+    piece.target = null;
+    piece._plannedMoveRound = null;
+    piece.command = "dead";
+}
+
+function getBattleStartPosition(side, ownerId, slotIndex, allSlots) {
+    const owners = [];
+    for (const slot of allSlots) {
+        if (Number(slot.side) !== Number(side)) continue;
+        const id = String(slot.ownerId ?? "");
+        if (id && !owners.includes(id)) owners.push(id);
+    }
+
+    const ownerIndex = Math.max(0, owners.indexOf(String(ownerId ?? "")));
+    const blockColumn = ownerIndex % 3;
+    const blockRow = Math.floor(ownerIndex / 3);
+    const slot = Math.max(0, Math.min(5, Number(slotIndex) || 0));
+    const slotColumn = slot % 3;
+    const slotRow = Math.floor(slot / 3);
+
+    const x = 1 + blockColumn * 3 + slotColumn;
+    const y = Number(side) === 1
+        ? 2 + blockRow * 3 + slotRow
+        : ROWS - 4 - blockRow * 3 - slotRow;
+
+    return {
+        x: Math.max(0, Math.min(COLS - 1, x)),
+        y: Math.max(0, Math.min(ROWS - 1, y))
+    };
+}
+
+function buildBattlePieces(attack) {
+    const slots = battleParticipantSlots(attack)
+        .filter(slot => Number(slot.count) > 0);
+
+    const ownerNumbers = new Map();
+    for (const slot of slots) {
+        const id = String(slot.ownerId);
+        if (!ownerNumbers.has(id)) ownerNumbers.set(id, ownerNumbers.size + 1);
+    }
+
+    const nextPieces = [];
+    for (const slot of slots) {
+        const pos = getBattleStartPosition(slot.side, slot.ownerId, slot.slotIndex, slots);
+        const piece = {
+            player: Number(slot.side),
+            side: Number(slot.side),
+            ownerId: String(slot.ownerId),
+            ownerName: String(slot.ownerName || "بازیکن"),
+            ownerNumber: ownerNumbers.get(String(slot.ownerId)) || null,
+            team: slot.side === 1 ? "مهاجم" : "مدافع",
+            type: validBattleUnitType(slot.type),
+            x: pos.x * CELL_SIZE + CELL_SIZE / 2,
+            y: pos.y * CELL_SIZE + CELL_SIZE / 2,
+            count: Math.max(0, Math.floor(Number(slot.count) || 0)),
+            health: 0,
+            command: "battle",
+            target: null,
+            _plannedMoveRound: null,
+            _moveFrom: null,
+            _moveStartedAt: 0,
+            _moveDuration: 0,
+            _battleKey: `${slot.side}:${slot.ownerId}:${slot.slotIndex}`
+        };
+        piece._battleInitialCount = piece.count;
+        piece.health = piece.count * stats[piece.type].unitHealth;
+        nextPieces.push(piece);
+    }
+
+    return nextPieces;
+}
+
+function startBattle(attack) {
+    if (!attack) return false;
+
+    const selfId = getBattleSelfId(attack);
+    if (!selfId) {
+        setDevMessage("شناسه بازیکن فعلی مشخص نیست.");
+        return false;
+    }
+
+    const allSlots = battleParticipantSlots(attack);
+    const localSlots = allSlots.filter(slot =>
+        String(slot.ownerId) === selfId && Number(slot.count) > 0
+    );
+
+    // مهم: role حمله در تعیین مالکیت هیچ نقشی ندارد.
+    if (!localSlots.length) {
+        setDevMessage("شما در نیروهای این نبرد حضور ندارید.");
+        return false;
+    }
+
+    const localSide = Number(localSlots[0].side);
+    const nextPieces = buildBattlePieces(attack);
+    if (!nextPieces.length) {
+        setDevMessage("هیچ نیرویی برای شروع نبرد وجود ندارد.");
+        return false;
+    }
+
+    controlledBattleOwnerId = selfId;
+    controlledBattlePlayer = localSide;
+    currentBattleRole = localSide;
+    battleLocalSide = localSide;
+    localPlayer = localSide;
+
+    pieces.length = 0;
+    pieces.push(...nextPieces);
+    selectedPiece = null;
+
+    window.currentBattleAttack = attack;
+    window.currentBattleSelfId = selfId;
+    window.currentBattleSlots = allSlots;
+    window.currentBattleInput = Array.isArray(attack.battleInput) ? attack.battleInput : [];
+
+    round = 1;
+    timeLeft = 20;
+    executing = false;
+    movementAnimationRunning = false;
+    gameStarted = true;
+
+    const resultEl = document.getElementById("battleResult");
+    if (resultEl) resultEl.style.display = "none";
+
+    const retreatControls = document.getElementById("battleRetreatControls");
+    if (retreatControls) {
+        retreatControls.classList.add("open");
+        retreatControls.querySelectorAll("[data-retreat-player]").forEach(btn => {
+            btn.style.display = Number(btn.dataset.retreatPlayer) === localSide ? "inline-block" : "none";
+        });
+    }
+
+    document.getElementById("developmentPanel")?.classList.remove("open");
+    draw();
+
+    setDevMessage(
+        localSide === 1
+            ? `⚔️ نبرد آغاز شد؛ شما فقط نیروهای بازیکن خودتان (${selfId}) را کنترل می‌کنید.`
+            : `🛡️ نیروهای دفاعی رسیدند؛ شما فقط نیروهای بازیکن خودتان (${selfId}) را کنترل می‌کنید.`
+    );
+    return true;
+}
+
+function mergeBattleParticipants(attack) {
+    if (!gameStarted || !attack) return;
+
+    const incoming = buildBattlePieces(attack);
+    const byKey = new Map(pieces.map(p => [p._battleKey, p]));
+
+    for (const fresh of incoming) {
+        const old = byKey.get(fresh._battleKey);
+        if (!old) {
+            pieces.push(fresh);
+            continue;
+        }
+
+        // فقط دادهٔ نیرو به‌روز می‌شود؛ ownerId و ownerNumber هرگز از بازیکن دیگر گرفته نمی‌شوند.
+        if (old.health <= 0 && fresh.health > 0) {
+            Object.assign(old, fresh);
+        }
+    }
+
+    window.currentBattleAttack = attack;
+    window.currentBattleSlots = battleParticipantSlots(attack);
+    draw();
+}
+
+function closeBattleLocalState() {
+    gameStarted = false;
+    executing = false;
+    movementAnimationRunning = false;
+    selectedPiece = null;
+    controlledBattleOwnerId = null;
+    controlledBattlePlayer = null;
+    currentBattleRole = null;
+    battleLocalSide = null;
+    localPlayer = null;
+    window.currentBattleSelfId = null;
+    window.currentBattleSlots = [];
+    window.currentBattleInput = [];
+}
 
 /* ===============================
    پایان راند
@@ -4045,303 +4266,52 @@ function renderArmyMarches(){
 }
 
 // ===============================
-// شروع نبرد پس از رسیدن لشکر
 // ===============================
-// این تابع عمداً مستقل از setupCounts و آرایش اولیه است.
-// تنها منبع تعداد و نوع نیرو، ۶ اسلات حمله است.
-let battleInputSlots = [];
+// اتصال رابط توسعه به موتور جدید نبرد
+// ===============================
+async function enterBattleFromDevelopment(){
+  if(gameStarted){
+    document.getElementById('developmentPanel')?.classList.remove('open');
+    return;
+  }
+  if(!onlineToken){
+    setDevMessage('ابتدا وارد حساب شوید.');
+    return;
+  }
 
-async function joinSharedBattle(attack) {
-  if (!onlineToken || !attack?.id) return null;
-  try {
-    const data = await onlineRequest('/attacks/' + encodeURIComponent(attack.id) + '/join', {
-      method: 'POST',
-      body: JSON.stringify({ role: attack.role || (String(attack.attackerId) === String(worldPlayers.find(p=>p.self)?.id) ? 'attacker' : 'defender') })
-    });
-    return data.attack || null;
-  } catch (e) {
-    console.warn('ورود مشترک به نبرد ناموفق بود:', e);
-    return null;
+  try{
+    const [incomingData,outgoingData]=await Promise.all([
+      onlineRequest('/attacks/incoming'),
+      onlineRequest('/attacks/outgoing')
+    ]);
+
+    const incoming=Array.isArray(incomingData.attacks)?incomingData.attacks:[];
+    const outgoing=Array.isArray(outgoingData.attacks)?outgoingData.attacks:[];
+    const selfId=getBattleSelfId();
+    const arrived=[...incoming,...outgoing]
+      .filter(a=>a.status==='arrived' && !a.battleEndedAt);
+
+    // فقط نبردی که همین حساب واقعاً در آرایه نیروهای آن عضو است انتخاب می‌شود.
+    const attack=arrived.find(a=>
+      battleParticipantSlots(a).some(s=>
+        String(s.ownerId)===selfId && Number(s.count)>0
+      )
+    );
+
+    if(!attack){
+      setDevMessage('⚔️ در حال حاضر نیروی متعلق به این بازیکن برای ورود به نبرد آماده نیست.');
+      return;
+    }
+
+    startBattle(attack);
+  }catch(e){
+    console.error('ورود به نبرد ناموفق بود:',e);
+    setDevMessage('ورود به صحنه نبرد انجام نشد؛ اتصال به سرور را بررسی کنید.');
   }
 }
 
-async function getSharedBattle(attack) {
-  if (!onlineToken || !attack?.id) return null;
-  try {
-    const data = await onlineRequest('/attacks/' + encodeURIComponent(attack.id) + '/battle', { method: 'GET' });
-    return data.attack || null;
-  } catch (e) {
-    return null;
-  }
-}
+document.getElementById("enterBattleFromDevelopmentButton")?.addEventListener("click",enterBattleFromDevelopment);
 
-function battleIsSharedStarted(attack) {
-  return !!(attack && attack.battleStartedAt && attack.battleJoined?.attacker && attack.battleJoined?.defender);
-}
-
-function battleOwnerIdFromAttack(attack) {
-    // مالک کنترل همیشه حسابی است که همین مرورگر با آن وارد شده؛
-    // role حمله به‌تنهایی مالک مهره نیست، چون چند مهاجم/مدافع می‌توانند در یک نبرد باشند.
-    const localId = String(
-        worldPlayers.find(p => p.self)?.id ??
-        attack?.selfId ??
-        ""
-    ).trim();
-    if (!localId) return null;
-
-    const slots = battleParticipantSlots(attack);
-    if (Array.isArray(slots) && slots.length) {
-        const isParticipant = slots.some(slot => String(slot.ownerId ?? "") === localId && Number(slot.count) > 0);
-        if (isParticipant) return localId;
-        return null;
-    }
-
-    // سازگاری با داده‌های قدیمی که battleParticipants نداشتند.
-    if (String(attack?.attackerId ?? "") === localId) return localId;
-    if (String(attack?.targetId ?? "") === localId) return localId;
-    return null;
-}
-
-function canControlBattlePiece(piece) {
-    return !!(gameStarted && controlledBattleOwnerId && piece &&
-        String(piece.ownerId ?? "") === String(controlledBattleOwnerId));
-}
-
-function normalizeBattleParticipants(attack) {
-    const participants = attack?.battleParticipants;
-    if (!participants || (!Array.isArray(participants.attackers) && !Array.isArray(participants.defenders))) {
-        return null;
-    }
-    const normalize = (list, side) => (Array.isArray(list) ? list : []).flatMap((entry, participantIndex) => {
-        const ownerId = String(entry?.id ?? entry?.playerId ?? entry?.ownerId ?? `unknown-${side}-${participantIndex}`);
-        const slots = Array.isArray(entry?.slots) ? entry.slots : [];
-        const ownerName = String(entry?.username ?? entry?.name ?? "بازیکن");
-        const team = side === 1 ? "مهاجم" : "مدافع";
-        return slots.slice(0, 6).map((slot, slotIndex) => ({
-            side, ownerId, ownerName, team, slotIndex,
-            type: validBattleUnitType(slot?.type),
-            count: Math.max(0, Math.floor(Number(slot?.count) || 0))
-        }));
-    });
-    return {
-        attackers: normalize(participants.attackers, 1),
-        defenders: normalize(participants.defenders, 2)
-    };
-}
-
-function validBattleUnitType(type) {
-    return ["archer", "cavalry", "swordsman"].includes(type) ? type : "archer";
-}
-
-function resetBattlePiece(piece, side, ownerId, x, y, ownerName="بازیکن", ownerNumber=null) {
-    piece.side = side;
-    piece.player = side;
-    // شناسه واقعی برای کنترل/مالکیت حفظ می‌شود؛ شماره نمایشی جداگانه است.
-    piece.ownerId = String(ownerId);
-    piece.ownerName = String(ownerName || "بازیکن");
-    piece.ownerNumber = Number.isFinite(Number(ownerNumber)) ? Number(ownerNumber) : null;
-    piece.team = side === 1 ? "مهاجم" : "مدافع";
-    piece.x = x;
-    piece.y = y;
-    piece._moveFrom = null;
-    piece._moveStartedAt = 0;
-    piece._moveDuration = 0;
-    piece.target = null;
-    piece._plannedMoveRound = null;
-    piece.command = "dead";
-}
-
-// هر بازیکن یک بلوک مستقل از ۶ خانه دارد تا نیروهای چند بازیکن در شروع نبرد
-// روی هم قرار نگیرند. مهاجمان در سمت چادر و مدافعان در سمت قلعه مستقر می‌شوند.
-function getBattleStartPosition(side, ownerId, slotIndex, allSlots) {
-    const owners = [];
-    for (const slot of allSlots || []) {
-        if (Number(slot.side) !== Number(side)) continue;
-        const id = String(slot.ownerId ?? "");
-        if (!owners.includes(id)) owners.push(id);
-    }
-
-    let ownerIndex = owners.indexOf(String(ownerId ?? ""));
-    if (ownerIndex < 0) ownerIndex = 0;
-
-    // هر بازیکن: ۳ ستون × ۲ ردیف = ۶ اسلات.
-    // سه بلوک در عرض میدان جا می‌گیرند و بازیکنان بعدی در ردیف بعدی می‌آیند.
-    const blockColumn = ownerIndex % 3;
-    const blockRow = Math.floor(ownerIndex / 3);
-    const slot = Math.max(0, Math.min(5, Number(slotIndex) || 0));
-    const slotColumn = slot % 3;
-    const slotRow = Math.floor(slot / 3);
-
-    const x = 1 + blockColumn * 3 + slotColumn;
-    const attackerBaseY = 2 + blockRow * 3;
-    const defenderBaseY = ROWS - 4 - blockRow * 3;
-    const y = Number(side) === 1
-        ? attackerBaseY + slotRow
-        : defenderBaseY - slotRow;
-
-    return {
-        x: Math.max(0, Math.min(COLS - 1, x)),
-        y: Math.max(0, Math.min(ROWS - 1, y))
-    };
-}
-
-function battleParticipantSlots(attack){
-    const participants = normalizeBattleParticipants(attack);
-    if(participants){
-        const attackers=[...participants.attackers.map(s=>({...s,side:1}))];
-        const defenders=[...participants.defenders.map(s=>({...s,side:2}))];
-
-        // چینش دفاعی قلعه هدف منبع قطعی دفاع است. اگر آرایه مشترک سرور
-        // دفاع را نداشت/خالی بود، مستقیماً از defenderSetup استفاده می‌کنیم.
-        const targetId=String(attack?.targetId ?? "");
-        const hasTargetDefense=defenders.some(s=>String(s.ownerId)===targetId && Number(s.count)>0);
-        if(!hasTargetDefense && Array.isArray(attack?.defenderSetup?.slots)){
-            const fallback=attack.defenderSetup.slots.slice(0,6).map((x,i)=>({
-                side:2, ownerId:targetId, ownerName:String(attack.defenderName||attack.targetName||"مدافع"),
-                team:"مدافع", slotIndex:i, type:validBattleUnitType(x?.type),
-                count:Math.max(0,Math.floor(Number(x?.count)||0))
-            }));
-            if(fallback.some(s=>s.count>0)) defenders.push(...fallback);
-        }
-        return [...attackers,...defenders];
-    }
-    const attackers=Array.from({length:6},(_,i)=>{const x=attack.slots?.[i]||{};return {side:1,ownerId:String(attack.attackerId),ownerName:String(attack.attackerName||"مهاجم"),team:"مهاجم",slotIndex:i,type:validBattleUnitType(x.type),count:Math.max(0,Math.floor(Number(x.count)||0))};});
-    const defenders=Array.from({length:6},(_,i)=>{const x=attack.defenderSetup?.slots?.[i]||{};return {side:2,ownerId:String(attack.targetId),ownerName:String(attack.defenderName||attack.targetName||"مدافع"),team:"مدافع",slotIndex:i,type:validBattleUnitType(x.type),count:Math.max(0,Math.floor(Number(x.count)||0))};});
-    return [...attackers,...defenders];
-}
-
-function mergeBattleParticipants(attack){
-    if(!gameStarted || !attack) return;
-    const slots=battleParticipantSlots(attack);
-    const existing=new Map(pieces.filter(p=>p.health>0||p._battleKey).map(p=>[p._battleKey,p]));
-    for(const slot of slots){
-        const key=`${slot.side}:${String(slot.ownerId)}:${slot.slotIndex}`;
-        if(existing.has(key)){
-            const p=existing.get(key);
-            if(p.health<=0 && slot.count>0){p.count=slot.count;p.health=slot.count*stats[p.type].unitHealth;p.command='battle';}
-            continue;
-        }
-        let piece=pieces.find(p=>!p._battleKey && p.health<=0);
-        if(!piece){piece={player:slot.side,side:slot.side,ownerId:'',type:'archer',x:0,y:0,count:0,health:0,command:'dead',target:null};pieces.push(piece);}
-        const pos=getBattleStartPosition(slot.side,slot.ownerId,slot.slotIndex,slots);
-        const ownerNumbers = new Map();
-        for (const item of slots) {
-            const id = String(item.ownerId ?? "");
-            if (!ownerNumbers.has(id)) ownerNumbers.set(id, ownerNumbers.size + 1);
-        }
-        resetBattlePiece(piece,slot.side,slot.ownerId,pos.x*CELL_SIZE+CELL_SIZE/2,pos.y*CELL_SIZE+CELL_SIZE/2,slot.ownerName,ownerNumbers.get(String(slot.ownerId ?? "")) || null);
-        piece.type=validBattleUnitType(slot.type);
-        piece.count=Math.max(0,Math.floor(Number(slot.count)||0));
-        piece._battleInitialCount=piece.count;
-        piece.health=piece.count*stats[piece.type].unitHealth;
-        piece.command=piece.count>0?'battle':'dead';
-        piece._battleKey=key;
-    }
-    draw();
-}
-
-function startBattle(attack) {
-    if (!attack) return;
-
-    const validTypes = new Set(["archer", "cavalry", "swordsman"]);
-    const localOwnerId = battleOwnerIdFromAttack(attack);
-    if (!localOwnerId) {
-        console.warn("بازیکن فعلی عضو این نبرد نیست.");
-        setDevMessage("این بازیکن در نیروهای این نبرد حضور ندارد.");
-        return;
-    }
-
-    // سمت هم از خود participant گرفته می‌شود، نه از role حمله.
-    // این بخش برای چند مهاجم/چند مدافع حیاتی است.
-    const localSlots = battleParticipantSlots(attack).filter(slot =>
-        String(slot.ownerId ?? "") === String(localOwnerId) && Number(slot.count) > 0
-    );
-    const localSide = Number(localSlots[0]?.side) || 0;
-    if (!localSide) {
-        console.warn("سمت بازیکن فعلی در آرایه نبرد مشخص نیست.");
-        return;
-    }
-
-    controlledBattleOwnerId = localOwnerId;
-    controlledBattlePlayer = localSide;
-    currentBattleRole = localSide;
-    battleLocalSide = localSide;
-    localPlayer = localSide;
-
-    // یک منبع واحد برای مهره‌های رسیده: چند مهاجم + چینش دفاعی قلعه + هر مدافع بعدی.
-    // در صورت ناقص بودن battleParticipants، چینش دفاعی داخل خود حمله نیز به‌عنوان fallback وارد می‌شود.
-    const allBattleSlots = battleParticipantSlots(attack);
-    const attackerSlots = allBattleSlots.filter(s => Number(s.side) === 1);
-    const defenderSlots = allBattleSlots.filter(s => Number(s.side) === 2);
-
-    // در هر نبرد، فقط مهره‌های مورد استفاده ساخته/پاک می‌شوند؛ مالکیت هر مهره صریحاً ثبت می‌شود.
-    pieces.forEach(p => { p.command="dead"; p.target=null; p.health=0; p.count=0; });
-    selectedPiece = null;
-
-    const allSlots = [...attackerSlots.map(s=>({...s, side:1})), ...defenderSlots.map(s=>({...s, side:2}))];
-
-    // شماره نمایشی مالک‌ها در همین نبرد: ۱، ۲، ۳، ...
-    const ownerNumbers = new Map();
-    for (const slot of allSlots) {
-        const key = String(slot.ownerId ?? "");
-        if (!ownerNumbers.has(key)) ownerNumbers.set(key, ownerNumbers.size + 1);
-    }
-    while (pieces.length < allSlots.length) {
-        pieces.push({player:1,side:1,ownerId:"",type:"archer",x:0,y:0,count:0,health:0,command:"dead",target:null});
-    }
-
-    allSlots.forEach((slot, index) => {
-        const piece = pieces[index];
-        const pos = getBattleStartPosition(slot.side, slot.ownerId, slot.slotIndex, allSlots);
-        resetBattlePiece(
-            piece,
-            slot.side,
-            slot.ownerId,
-            pos.x * CELL_SIZE + CELL_SIZE / 2,
-            pos.y * CELL_SIZE + CELL_SIZE / 2,
-            slot.ownerName,
-            ownerNumbers.get(String(slot.ownerId ?? "")) || null
-        );
-        piece._battleKey = `${slot.side}:${String(slot.ownerId)}:${slot.slotIndex}`;
-        piece.type = validTypes.has(slot.type) ? slot.type : "archer";
-        piece.count = Math.max(0, Math.floor(Number(slot.count) || 0));
-        piece._battleInitialCount = piece.count;
-        piece.health = piece.count * stats[piece.type].unitHealth;
-        piece.command = piece.count > 0 ? "battle" : "dead";
-    });
-
-    attack.attackCost = Math.max(0, Math.floor(Number(attack.attackCost) || 0));
-    window.currentBattleAttack = attack;
-    window.currentBattleSlots = attack.slots?.slice(0,6) || [];
-    window.currentBattleInput = Array.isArray(attack.battleInput) ? attack.battleInput : [];
-
-    selectedPiece = null;
-    const resultEl = document.getElementById("battleResult");
-    if (resultEl) resultEl.style.display = "none";
-
-    round = 1;
-    timeLeft = 20;
-    gameStarted = true;
-    executing = false;
-    movementAnimationRunning = false;
-
-    const retreatControls = document.getElementById("battleRetreatControls");
-    if (retreatControls) {
-        retreatControls.classList.add("open");
-        retreatControls.querySelectorAll("[data-retreat-player]").forEach(btn => {
-            btn.style.display = Number(btn.dataset.retreatPlayer) === localSide ? "inline-block" : "none";
-        });
-    }
-
-    document.getElementById("developmentPanel")?.classList.remove("open");
-    document.getElementById("armyMarches")?.replaceChildren();
-    draw();
-    setDevMessage(
-        localSide === 1
-            ? "⚔️ نبرد آغاز شد؛ فقط نیروهای متعلق به حساب شما قابل حرکت هستند."
-            : "🛡️ حمله به قلعه شما رسید؛ فقط نیروهای دفاعی متعلق به حساب شما قابل حرکت هستند."
-    );
-}
 function closeMapAndReturn(){document.getElementById("playerMapPanel").classList.remove("open");document.getElementById("developmentPanel").classList.add("open");}
 
 document.getElementById("playerMapButton").addEventListener("click",function(){document.getElementById("developmentPanel").classList.remove("open");document.getElementById("playerMapPanel").classList.add("open");selectedWorldPlayer=null;document.getElementById("selectedPlayerCard").classList.remove("open");renderPlayerWorld();});
