@@ -2922,16 +2922,92 @@ async function launchAttack(){
   const targetId=String(panel.dataset.targetId || "");
   const target=worldPlayers.find(p=>String(p.id)===targetId);
   if(!target) return;
-  const totals={archer:0,cavalry:0,swordsman:0}, slots=[]; let total=0;
-  for(let i=0;i<6;i++){ const type=document.getElementById("attackType"+i).value; const count=Math.max(0,parseInt(document.getElementById("attackCount"+i).value)||0); slots.push({type,count}); if(type&&Object.prototype.hasOwnProperty.call(totals,type)){totals[type]+=count;total+=count;} }
+
+  const totals={archer:0,cavalry:0,swordsman:0};
+  const slots=[];
+  let total=0;
+  let unitCount=0;
+
+  for(let i=0;i<6;i++){
+    const type=document.getElementById("attackType"+i).value;
+    const count=Math.max(0,parseInt(document.getElementById("attackCount"+i).value)||0);
+    slots.push({type,count});
+    if(type && Object.prototype.hasOwnProperty.call(totals,type) && count>0){
+      totals[type]+=count;
+      total+=count;
+      unitCount++;
+    }
+  }
+
   if(total<1){alert("حداقل یک نیرو برای حمله انتخاب کنید.");return;}
+  if(unitCount<1 || unitCount>6){alert("هر ارتش باید بین ۱ تا ۶ واحد نیرو داشته باشد.");return;}
+
   const army=developmentState.army||{};
-  for(const type of ["archer","cavalry","swordsman"]){if(totals[type]>Number(army[type]||0)){alert(`تعداد ${type} بیشتر از نیروهای موجود است.`);return;}}
-  army.archer=Number(army.archer||0)-totals.archer; army.cavalry=Number(army.cavalry||0)-totals.cavalry; army.swordsman=Number(army.swordsman||0)-totals.swordsman; developmentState.army=army;
-  const distance=Math.max(1,Number(panel.dataset.distance)||1); const travelSeconds=Math.max(1,Math.round(distance*20));
-  window.currentBattleAttack={id:Date.now(),attackerId:worldPlayers.find(p=>p.self)?.id,targetId,targetName:target.name,battleSide:"مهاجم",distance,slots};
-  timeLeft=travelSeconds; gameStarted=true; panel.classList.remove("open");
-  const timer=document.getElementById("attackTravelTimer"); if(timer){timer.textContent=`⏱ زمان رسیدن: ${formatDuration(timeLeft)}`;timer.style.display="block";}
+  for(const type of ["archer","cavalry","swordsman"]){
+    if(totals[type]>Number(army[type]||0)){
+      alert(`تعداد ${type} بیشتر از نیروهای موجود است.`);
+      return;
+    }
+  }
+
+  const distance=Math.max(1,Number(panel.dataset.distance)||1);
+  const travelSeconds=Math.max(1,Math.round(distance*20));
+  const attackCost=total;
+  if((Number(developmentState.gold)||0) < attackCost){alert("طلای کافی برای حمله وجود ندارد.");return;}
+
+  const attackerId=String(worldPlayers.find(p=>p.self)?.id || "");
+  if(!attackerId){alert("شناسه بازیکن پیدا نشد.");return;}
+
+  const previousArmy={archer:Number(army.archer)||0,cavalry:Number(army.cavalry)||0,swordsman:Number(army.swordsman)||0};
+  const previousGold=Number(developmentState.gold)||0;
+  army.archer=previousArmy.archer-totals.archer;
+  army.cavalry=previousArmy.cavalry-totals.cavalry;
+  army.swordsman=previousArmy.swordsman-totals.swordsman;
+  developmentState.gold=previousGold-attackCost;
+  developmentState.army=army;
+
+  try {
+    const data=await onlineRequest("/attack",{
+      method:"POST",
+      body:JSON.stringify({targetId,distance,travelSeconds,attackCost,slots})
+    });
+    const serverAttack=data?.attack;
+    if(!serverAttack) throw new Error("پاسخ حمله از سرور ناقص است.");
+
+    window.currentBattleAttack={
+      ...serverAttack,
+      attackerId,
+      targetId,
+      targetName:target.name,
+      battleSide:"مهاجم",
+      distance,
+      slots
+    };
+
+    const localAttack={
+      ...serverAttack,
+      status:"traveling",
+      remaining:travelSeconds,
+      totalTravel:travelSeconds,
+      targetName:target.name,
+      composition:totals
+    };
+    developmentState.activeAttacks=Array.isArray(developmentState.activeAttacks)?developmentState.activeAttacks:[];
+    developmentState.activeAttacks.push(localAttack);
+    saveDevelopmentState();
+
+    timeLeft=travelSeconds;
+    gameStarted=true;
+    panel.classList.remove("open");
+    renderArmyMarches();
+    const timer=document.getElementById("attackTravelTimer");
+    if(timer){timer.textContent=`⏱ زمان رسیدن: ${formatDuration(timeLeft)}`;timer.style.display="block";}
+  } catch(e) {
+    developmentState.gold=previousGold;
+    developmentState.army=previousArmy;
+    saveDevelopmentState();
+    alert(e?.message || "اعزام حمله انجام نشد.");
+  }
 }
 
 function fastArrivalForTesting(){
@@ -3028,8 +3104,11 @@ async function pollIncomingAttacks(){
       const a=active[0]; const remain=Math.max(0,Math.ceil((Number(a.arrivalAt)||Date.now()-Date.now())/1000));
       box.innerHTML=`⚠️ حمله به قلعه شما<br><span style="font-size:13px">مهاجم: ${a.attackerName||'ناشناس'} | ${a.status==='arrived'?'نیروها رسیده‌اند':'زمان رسیدن: '+formatDuration(Math.max(0,Math.ceil((Number(a.arrivalAt)-Date.now())/1000)))}</span>`;
       if(a.status==='arrived'){
-        batman(a);
-        const btn=document.createElement('button'); btn.textContent='🛡️ مشاهده نبرد'; btn.style.cssText='margin-top:8px;padding:7px 12px;border-radius:8px;cursor:pointer;'; btn.onclick=()=>{ batman(a); box.remove(); }; box.appendChild(document.createElement('br')); box.appendChild(btn);
+        if(!window.batmanProcessedAttackIds.has(String(a.id))){
+          window.currentBattleAttack=a;
+          timeLeft=0;
+          gameStarted=true;
+        }
       }
     }
   }catch(e){}
@@ -3044,8 +3123,10 @@ async function pollOutgoingAttacks(){
       !a.battleEndedAt &&
       !window.batmanProcessedAttackIds.has(String(a.id))
     );
-    if(arrived){
-      batman(arrived);
+    if(arrived && !window.batmanProcessedAttackIds.has(String(arrived.id))){
+      window.currentBattleAttack=arrived;
+      timeLeft=0;
+      gameStarted=true;
     }
   }catch(e){}
 }

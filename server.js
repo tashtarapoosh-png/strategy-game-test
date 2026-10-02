@@ -372,7 +372,7 @@ const server=http.createServer(async(req,res)=>{
       // زمان حرکت از منطق بازی می‌آید، اما سرور آن را محدود و معتبر می‌کند.
       // حداقل یک دقیقه برای هر واحد فاصله حفظ می‌شود تا حمله واقعاً در مسیر باشد.
       const requestedTravelSeconds=Math.max(0,num(input.travelSeconds,0));
-      const travelSeconds=Math.max(60,Math.round(distance*60),Math.round(requestedTravelSeconds));
+      const travelSeconds=Math.max(1,Math.round(distance*20),Math.round(requestedTravelSeconds));
       const now=Date.now();
       const attackId=crypto.randomUUID();
       const defenderSetup=sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army);
