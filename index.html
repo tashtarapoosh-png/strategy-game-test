@@ -2439,14 +2439,18 @@ function batman() {
     // developmentState.defenderSetups.self است.
     let defenseSlots = [];
     if (Array.isArray(attack.defenderSetup?.slots)) {
+        // آرایش دفاعی که سرور همراه خود حمله فرستاده، منبع اصلی است.
         defenseSlots = attack.defenderSetup.slots.slice(0, 6);
+    } else if (Array.isArray(attack.defenseSlots)) {
+        defenseSlots = attack.defenseSlots.slice(0, 6);
     } else {
+        // فقط برای حمله‌ای که قلعه هدف همین حساب است، از آرایش محلی استفاده کن.
+        // targetId شناسه بازیکن است و نباید با localPlayer (عدد ۱/۲ صحنه) مقایسه شود.
         const ownDefense = developmentState.defenderSetups?.self?.slots;
-        const targetIsOwnCastle = String(attack.targetId || "") === String(localPlayer || "");
+        const selfId = worldPlayers.find(function (p) { return p && p.self; })?.id;
+        const targetIsOwnCastle = String(attack.targetId || "") === String(selfId || "");
         if (targetIsOwnCastle && Array.isArray(ownDefense)) {
             defenseSlots = ownDefense.slice(0, 6);
-        } else if (Array.isArray(attack.defenseSlots)) {
-            defenseSlots = attack.defenseSlots.slice(0, 6);
         }
     }
 
@@ -2889,11 +2893,6 @@ function finalizeRoundAfterMovement() {
     draw();
 }
 
-function executeRound() {
-    // این تابع دیگر در چرخه تایمر فراخوانی نمی‌شود.
-    // صفر شدن تایمر مستقیماً batman() را اجرا می‌کند.
-}
-
 /* ===============================
    تایمر
 ================================ */
@@ -2915,11 +2914,8 @@ setInterval(
         if (
             timeLeft <= 0
         ) {
-
-            timeLeft =
-                0;
-
             batman();
+            return;
         }
 
 
@@ -4263,9 +4259,8 @@ async function pollOutgoingAttacks(){
       !window.batmanProcessedAttackIds.has(String(a.id))
     );
     if(arrived){
-      // فقط مهاجمِ صاحب همین حساب نبرد را باز می‌کند.
-      const selfId=worldPlayers.find(p=>p.self)?.id;
-      if(String(arrived.attackerId)===String(selfId)) startBattle(arrived);
+      // رسیدن حمله فقط ثبت/اعلام می‌شود؛ شروع خودکار نبرد ممنوع است.
+      // ورود به مرحله batman فقط از مسیر دستی/مشخص‌شده انجام می‌شود.
     }
   }catch(e){}
 }
