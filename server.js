@@ -36,6 +36,19 @@ function sanitizeDefenseSlots(slots, army){
 function attackForClient(a, attacker, defender){
   return {...a, attackerName:attacker?.username||'مهاجم', defenderName:defender?.username||'مدافع', arrivalAt:Number(a.arrivalAt)||0};
 }
+function canonicalBattleStateForAttack(a){
+  if(a && a.battleState) return a.battleState;
+  const targetId=String(a?.targetId||'');
+  if(!targetId) return null;
+  const candidates=[];
+  for(const player of db.users||[]){
+    for(const other of (player.state?.activeAttacks||[])){
+      if(other.battleState && !other.battleEndedAt && String(other.targetId)===targetId) candidates.push(other);
+    }
+  }
+  if(!candidates.length) return null;
+  return candidates.sort((x,y)=>Number(y.battleState?.updatedAt||y.createdAt||0)-Number(x.battleState?.updatedAt||x.createdAt||0))[0].battleState;
+}
 async function persistAttackToUsers(attacker, defender){
   await saveUser(attacker);
   await saveUser(defender);
@@ -397,7 +410,11 @@ const server=http.createServer(async(req,res)=>{
         if(a.status==='traveling' && Number(a.arrivalAt)<=now){ a.status='arrived'; a.remaining=0; changed=true; }
       }
       if(changed) await saveUser(u);
-      const result=outgoing.map(a=>attackForClient(a, u, db.users.find(x=>String(x.id)===String(a.targetId))));
+      const result=outgoing.map(a=>{
+        const clientAttack=attackForClient(a, u, db.users.find(x=>String(x.id)===String(a.targetId)));
+        if(!clientAttack.battleState) clientAttack.battleState=canonicalBattleStateForAttack(a);
+        return clientAttack;
+      });
       return send(res,200,{attacks:result});
     }
 
@@ -412,9 +429,46 @@ const server=http.createServer(async(req,res)=>{
       const result=[];
       for(const a of incoming){
         const attacker=db.users.find(x=>String(x.id)===String(a.attackerId));
-        result.push(attackForClient(a,attacker,u));
+        const clientAttack=attackForClient(a,attacker,u);
+        if(!clientAttack.battleState) clientAttack.battleState=canonicalBattleStateForAttack(a);
+        result.push(clientAttack);
       }
       return send(res,200,{attacks:result});
+    }
+
+    if(req.url==='/api/attacks/battle'&&req.method==='POST'){
+      const input=await body(req);
+      const attackId=String(input.attackId||'');
+      if(!attackId) return send(res,400,{error:'شناسه نبرد نامعتبر است.'});
+      const mine=Array.isArray(u.state.activeAttacks)?u.state.activeAttacks.find(a=>String(a.id)===attackId):null;
+      if(!mine) return send(res,404,{error:'نبرد پیدا نشد.'});
+      if(String(mine.attackerId)!==String(u.id) && String(mine.targetId)!==String(u.id)) return send(res,403,{error:'شما عضو این نبرد نیستید.'});
+      const otherId=String(mine.attackerId)===String(u.id)?mine.targetId:mine.attackerId;
+      const other=db.users.find(x=>String(x.id)===otherId);
+      if(!other) return send(res,404,{error:'طرف مقابل نبرد پیدا نشد.'});
+      let state=input.battleState && typeof input.battleState==='object' ? input.battleState : null;
+      const canonical=canonicalBattleStateForAttack(mine);
+      if(canonical && state){
+        const merged=JSON.parse(JSON.stringify(canonical));
+        const incomingArmies=Array.isArray(state.armies)?state.armies:[];
+        const known=new Set((merged.armies||[]).map(x=>String(x.sourceAttackId||'')));
+        for(const army of incomingArmies){
+          const source=String(army.sourceAttackId||'');
+          if(source && !known.has(source)){ (merged.armies||(merged.armies=[])).push(army); known.add(source); }
+        }
+        merged.updatedAt=Date.now();
+        state=merged;
+      }
+      const ended=Boolean(input.ended);
+      const apply=a=>{
+        a.status='arrived'; a.remaining=0;
+        if(state) a.battleState=state;
+        if(ended){a.battleEndedAt=Date.now();a.winnerSide=input.winnerSide||state?.winnerSide||null;}
+      };
+      const counterpart=Array.isArray(other.state.activeAttacks)?other.state.activeAttacks.find(a=>String(a.id)===attackId):null;
+      apply(mine); if(counterpart) apply(counterpart);
+      await saveUser(u); if(other.id!==u.id) await saveUser(other);
+      return send(res,200,{ok:true,attack:mine});
     }
 
     if(req.url.startsWith('/api/attacks/')&&req.method==='POST'){
