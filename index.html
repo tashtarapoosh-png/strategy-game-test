@@ -2710,6 +2710,8 @@ async function loadOnlineWorldPlayers(){
   }
 }
 
+const ONLINE_API = (window.location.origin || "") + "/api";
+
 async function onlineRequest(path, options = {}) {
     const headers = {"Content-Type":"application/json", "Accept":"application/json", ...(options.headers || {})};
     if (onlineToken) headers.Authorization = "Bearer " + onlineToken;
