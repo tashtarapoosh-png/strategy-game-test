@@ -183,15 +183,6 @@ function normalizeState(raw){
 
   d.activeAttacks=Array.isArray(s.activeAttacks)?s.activeAttacks.map(a=>({...a,remaining:Math.max(0,num(a.remaining,0))})).slice(0,100):[];
   d.defenderSetups=(s.defenderSetups&&typeof s.defenderSetups==='object')?s.defenderSetups:{};
-  // آرایش پیش‌فرض هر قلعه: ۱۰ کماندار، ۱۰ سواره و ۱۰ شمشیرزن.
-  if(!d.defenderSetups.self || !Array.isArray(d.defenderSetups.self.slots) || d.defenderSetups.self.slots.length!==6){
-    d.defenderSetups.self={slots:[
-      {type:'archer',count:Math.min(10,d.army.archer)},
-      {type:'cavalry',count:Math.min(10,d.army.cavalry)},
-      {type:'swordsman',count:Math.min(10,d.army.swordsman)},
-      {type:'archer',count:0},{type:'cavalry',count:0},{type:'swordsman',count:0}
-    ]};
-  }
   d.pendingRecoveries=Array.isArray(s.pendingRecoveries)?s.pendingRecoveries.map(j=>({
     type:UNIT_TYPES.includes(j.type)?j.type:'archer',
     count:int(j.count),
@@ -379,14 +370,8 @@ const server=http.createServer(async(req,res)=>{
       if(total<1) return send(res,400,{error:'حداقل یک نیرو برای حمله لازم است.'});
       for(const type of UNIT_TYPES){ if(composition[type]>int(u.state.army[type])) return send(res,400,{error:`تعداد ${type} بیشتر از نیروهای موجود است.`}); }
       if(Number(u.state.gold)<cost) return send(res,400,{error:'طلای کافی برای حمله وجود ندارد.'});
-      // فاصله واقعی نقشه از مختصات ذخیره‌شده دو قلعه محاسبه می‌شود؛
-      // هر خانه در هر ۸ جهت دقیقاً ۳۰ ثانیه زمان حرکت دارد.
-      const from=worldCoord(u.cell);
-      const to=worldCoord(defender.cell);
-      const dx=Math.abs(Number(to.x)-Number(from.x));
-      const dy=Math.abs(Number(to.y)-Number(from.y));
-      const distance=Math.max(1,dx,dy);
-      const travelSeconds=distance*30;
+      const distance=Math.max(1,num(input.distance,1));
+      const travelSeconds=Math.max(60,int(input.travelSeconds,Math.round(distance*60)));
       const now=Date.now();
       const attackId=crypto.randomUUID();
       const defenderSetup=sanitizeDefenseSlots(defender.state.defenderSetups?.self?.slots,defender.state.army);
