@@ -2270,6 +2270,95 @@ document.getElementById("launchAttackButton").addEventListener("click",launchAtt
 const fastArrivalTestButton=document.getElementById("fastArrivalTestButton");
 if(fastArrivalTestButton) fastArrivalTestButton.addEventListener("click",fastArrivalForTesting);
 for(let i=0;i<6;i++){document.getElementById("attackType"+i).addEventListener("change",updateAttackSummary);document.getElementById("attackCount"+i).addEventListener("input",updateAttackSummary);}
+function showAuthMode(mode) {
+    authMode = mode;
+    document.getElementById("authChoices").style.display = "none";
+    document.getElementById("authForm").style.display = "block";
+    document.getElementById("authSubtitle").textContent = mode === "register"
+        ? "یک نام کاربری و رمز عبور برای ساخت قلعه جدید وارد کنید."
+        : "اطلاعات حساب خود را وارد کنید تا قلعه ذخیره‌شده بارگذاری شود.";
+    document.getElementById("loginButton").textContent = mode === "register" ? "ثبت نام و شروع بازی" : "ورود به بازی";
+    document.getElementById("loginMessage").textContent = "";
+    document.getElementById("usernameInput").value = "";
+    document.getElementById("passwordInput").value = "";
+    document.getElementById("usernameInput").focus();
+}
+
+function backToAuthChoices() {
+    authMode = null;
+    document.getElementById("authChoices").style.display = "flex";
+    document.getElementById("authForm").style.display = "none";
+    document.getElementById("authSubtitle").textContent = "برای شروع یکی از گزینه‌های زیر را انتخاب کنید.";
+}
+
+function openDevelopmentAfterLogin() {
+    document.getElementById("loginPanel").classList.add("hidden");
+    document.getElementById("developmentPanel").classList.add("open");
+    updateDevelopmentUI();
+}
+
+async function handleAuth() {
+    const username = document.getElementById("usernameInput").value.trim();
+    const password = document.getElementById("passwordInput").value;
+    const msg = document.getElementById("loginMessage");
+    const button = document.getElementById("loginButton");
+    if (!authMode) { msg.textContent = "ابتدا ثبت نام یا ورود را انتخاب کنید."; return; }
+    if (!username || !password) { msg.textContent = "نام کاربری و رمز عبور را وارد کنید."; return; }
+    if (username.length < 3) { msg.textContent = "نام کاربری باید حداقل ۳ کاراکتر باشد."; return; }
+    if (password.length < 4) { msg.textContent = "رمز عبور باید حداقل ۴ کاراکتر باشد."; return; }
+    msg.textContent = "در حال اتصال به سرور...";
+    button.disabled = true;
+    try {
+        const endpoint = authMode === "register" ? "/register" : "/login";
+        const data = await onlineRequest(endpoint, {
+            method:"POST",
+            body:JSON.stringify({username,password})
+        });
+        if (!data || !data.token || !data.user) throw new Error("پاسخ ثبت حساب از سرور ناقص است.");
+        onlineToken = data.token;
+        sessionStorage.setItem("strategy_game_token", onlineToken);
+        currentUsername = data.user.username;
+
+        const state = data.user.state || null;
+        loadDevelopmentState(currentUsername, !state);
+        if (state) {
+            developmentState.gold = Number(state.gold) || STARTING_GOLD;
+            developmentState.buildings = state.buildings || developmentState.buildings;
+            developmentState.army = state.army || developmentState.army;
+            developmentState.activeUpgrade = state.activeUpgrade || null;
+            developmentState.activeTraining = state.activeTraining || {barracks1:null,barracks2:null};
+            developmentState.activeAttacks = Array.isArray(state.activeAttacks) ? state.activeAttacks : [];
+            developmentState.defenderSetups = state.defenderSetups || {};
+            developmentState.pendingRecoveries = Array.isArray(state.pendingRecoveries) ? state.pendingRecoveries : [];
+            developmentState.attackRestrictions = state.attackRestrictions || {};
+            const elapsed = Math.max(0,(Date.now()-(Number(state.savedAt)||Date.now()))/1000);
+            if (elapsed > 0) processDevelopmentElapsed(elapsed);
+        }
+        saveDevelopmentState();
+        localStorage.setItem("strategy_game_last_user", currentUsername);
+        openDevelopmentAfterLogin();
+        await loadOnlineWorldPlayers();
+        msg.textContent = "";
+    } catch (e) {
+        if (onlineToken && /401|وارد حساب|نام کاربری|رمز عبور/i.test(String(e.message || ""))) {
+            onlineToken = null;
+            sessionStorage.removeItem("strategy_game_token");
+        }
+        msg.textContent = e.message || "ثبت نام/ورود انجام نشد.";
+    } finally {
+        button.disabled = false;
+    }
+}
+
+document.getElementById("showRegisterButton").addEventListener("click", () => showAuthMode("register"));
+document.getElementById("showLoginButton").addEventListener("click", () => showAuthMode("login"));
+document.getElementById("backAuthButton").addEventListener("click", backToAuthChoices);
+document.getElementById("loginButton").addEventListener("click", handleAuth);
+document.getElementById("passwordInput").addEventListener("keydown", e => { if (e.key === "Enter") handleAuth(); });
+
+updateDevelopmentUI();
+setInterval(() => { if (onlineToken) loadOnlineWorldPlayers(); }, 10000);
+
 async function pollIncomingAttacks(){
   if(!onlineToken || gameStarted) return;
   try{
