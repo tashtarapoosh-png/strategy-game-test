@@ -14,9 +14,7 @@ const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || '';
 if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error('SUPABASE_URL و SUPABASE_SECRET_KEY باید در Environment تنظیم شوند.');
 const BASE_WORLD_CELLS = 100; const CELLS_PER_PLAYER = 10; const DEVELOPMENT_MAX_LEVEL = 5; const BASE_GOLD_PER_MINUTE = 100; const STARTING_GOLD = 3000; const BASE_TRAINING_CAPACITY = 10; const BASE_TRAINING_TIME_SECONDS = 60; const UNIT_TYPES = ['archer','cavalry','swordsman']; const BUILDING_TYPES = ['castle','wall','barracks1','barracks2','goldMine'];
 const sessions = new Map(); const online = new Map();
-const DEFAULT_DEFENSE_SLOTS = [{type:'archer',count:10},{type:'cavalry',count:10},{type:'swordsman',count:10},{type:'archer',count:0},{type:'cavalry',count:0},{type:'swordsman',count:0}];
-const defaultDefenseSetups = () => ({self:{slots:DEFAULT_DEFENSE_SLOTS.map(x=>({...x}))}});
-const initialState = () => ({gold:STARTING_GOLD,buildings:{castle:{level:1},wall:{level:1},barracks1:{level:1},barracks2:{level:1},goldMine:{level:1}},army:{archer:100,cavalry:100,swordsman:100},activeUpgrade:null,activeTraining:{barracks1:null,barracks2:null},activeAttacks:[],defenderSetups:defaultDefenseSetups(),pendingRecoveries:[],attackRestrictions:{},savedAt:Date.now()});
+const initialState = () => ({gold:STARTING_GOLD,buildings:{castle:{level:1},wall:{level:1},barracks1:{level:1},barracks2:{level:1},goldMine:{level:1}},army:{archer:100,cavalry:100,swordsman:100},activeUpgrade:null,activeTraining:{barracks1:null,barracks2:null},activeAttacks:[],defenderSetups:{},pendingRecoveries:[],attackRestrictions:{},savedAt:Date.now()});
 let db={nextId:1,users:[]};
 async function supabaseRequest(table,{method='GET',query='',body=null,prefer=''}={}){const headers={apikey:SUPABASE_SECRET_KEY,Authorization:`Bearer ${SUPABASE_SECRET_KEY}`,'Content-Type':'application/json'};if(prefer)headers.Prefer=prefer;const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);try{const response=await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`,{method,headers,body:body===null?undefined:JSON.stringify(body),signal:controller.signal,cache:'no-store'});const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text;}if(!response.ok)throw new Error(`Supabase ${method} ${table} failed (${response.status}): ${typeof data==='string'?data:JSON.stringify(data)}`);return data;}catch(e){if(e?.name==='AbortError')throw new Error(`ارتباط با Supabase برای ${table} بیش از ۱۲ ثانیه طول کشید.`);throw e;}finally{clearTimeout(timeout);}}
 async function loadDB(){const rows=await supabaseRequest('players',{query:'?select=id,username,password_hash,password_salt,castle_cell'});const states=await supabaseRequest('player_states',{query:'?select=player_id,gold,buildings,army,active_upgrade,active_training,active_attacks,pending_recoveries,attack_restrictions,saved_at'});const setups=await supabaseRequest('defender_setups',{query:'?select=player_id,setup'});const stateMap=new Map(states.map(r=>[String(r.player_id),r]));const setupMap=new Map(setups.map(r=>[String(r.player_id),r.setup||{}]));db.users=rows.map(row=>{const s=stateMap.get(String(row.id));const state=normalizeState({gold:s?.gold,buildings:s?.buildings,army:s?.army,activeUpgrade:s?.active_upgrade,activeTraining:s?.active_training,activeAttacks:s?.active_attacks,pendingRecoveries:s?.pending_recoveries,attackRestrictions:s?.attack_restrictions,defenderSetups:setupMap.get(String(row.id))||{},savedAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()});return{id:String(row.id),username:row.username,salt:row.password_salt,passwordHash:row.password_hash,state,cell:Number.isInteger(Number(row.castle_cell))?Number(row.castle_cell):null,lastStateAt:s?.saved_at?new Date(s.saved_at).getTime():Date.now()};});return db;}
@@ -185,8 +183,14 @@ function normalizeState(raw){
 
   d.activeAttacks=Array.isArray(s.activeAttacks)?s.activeAttacks.map(a=>({...a,remaining:Math.max(0,num(a.remaining,0))})).slice(0,100):[];
   d.defenderSetups=(s.defenderSetups&&typeof s.defenderSetups==='object')?s.defenderSetups:{};
+  // آرایش پیش‌فرض هر قلعه: ۱۰ کماندار، ۱۰ سواره و ۱۰ شمشیرزن.
   if(!d.defenderSetups.self || !Array.isArray(d.defenderSetups.self.slots) || d.defenderSetups.self.slots.length!==6){
-    d.defenderSetups.self={slots:DEFAULT_DEFENSE_SLOTS.map(x=>({...x}))};
+    d.defenderSetups.self={slots:[
+      {type:'archer',count:Math.min(10,d.army.archer)},
+      {type:'cavalry',count:Math.min(10,d.army.cavalry)},
+      {type:'swordsman',count:Math.min(10,d.army.swordsman)},
+      {type:'archer',count:0},{type:'cavalry',count:0},{type:'swordsman',count:0}
+    ]};
   }
   d.pendingRecoveries=Array.isArray(s.pendingRecoveries)?s.pendingRecoveries.map(j=>({
     type:UNIT_TYPES.includes(j.type)?j.type:'archer',
@@ -375,10 +379,13 @@ const server=http.createServer(async(req,res)=>{
       if(total<1) return send(res,400,{error:'حداقل یک نیرو برای حمله لازم است.'});
       for(const type of UNIT_TYPES){ if(composition[type]>int(u.state.army[type])) return send(res,400,{error:`تعداد ${type} بیشتر از نیروهای موجود است.`}); }
       if(Number(u.state.gold)<cost) return send(res,400,{error:'طلای کافی برای حمله وجود ندارد.'});
-      // زمان حرکت فقط از مختصات واقعی دو قلعه محاسبه می‌شود: هر خانه در هر ۸ جهت = ۳۰ ثانیه.
-      const sourceCoord=worldCoord(u.cell);
-      const targetCoord=worldCoord(defender.cell);
-      const distance=Math.max(1,Math.max(Math.abs(sourceCoord.x-targetCoord.x),Math.abs(sourceCoord.y-targetCoord.y)));
+      // فاصله واقعی نقشه از مختصات ذخیره‌شده دو قلعه محاسبه می‌شود؛
+      // هر خانه در هر ۸ جهت دقیقاً ۳۰ ثانیه زمان حرکت دارد.
+      const from=worldCoord(u.cell);
+      const to=worldCoord(defender.cell);
+      const dx=Math.abs(Number(to.x)-Number(from.x));
+      const dy=Math.abs(Number(to.y)-Number(from.y));
+      const distance=Math.max(1,dx,dy);
       const travelSeconds=distance*30;
       const now=Date.now();
       const attackId=crypto.randomUUID();
